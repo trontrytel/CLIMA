@@ -299,7 +299,6 @@ function strain_rate_magnitude(S::SHermitianCompact{3,FT,6}) where {FT}
   sqrt(2*S[1,1]^2 + 4*S[2,1]^2 + 4*S[3,1]^2 + 2*S[2,2]^2 + 4*S[3,2]^2 + 2*S[3,3]^2)
 end
 function dynamic_viscosity_tensor(m::SmagorinskyLilly2D, S, state::Vars, diffusive::Vars, ∇transform::Grad, aux::Vars, t::Real)
-  # strain rate tensor norm
   # Notation: normS ≡ norm2S = √(2S:S)
   # ρν = (Cₛ * Δ * f_b)² * √(2S:S)
   FT = eltype(state)
@@ -309,13 +308,12 @@ function dynamic_viscosity_tensor(m::SmagorinskyLilly2D, S, state::Vars, diffusi
   @inbounds normS = strain_rate_magnitude(S)
   f_b² = squared_buoyancy_correction(normS, ∇transform, aux)
   # Return Buoyancy-adjusted Smagorinsky Coefficient (ρ scaled)
-  ρν_h = FT(m.C_smag * aux.turbulence.Δ)^2 * state.ρ * SH
-  ρν_v = FT(m.C_smag * aux.turbulence.Δ)^2 * state.ρ * SV * f_b²
-  ρν = SVector{3,FT}(ρν_h, ρν_h, ρν_v)
-  #ρν_mat = diagm(0 => ρν)
-  #return S{3,3,FT,9}(ρν_mat)
-  return SMatrix{3,3,FT,9}(ρν_h,0,0,ρν_h,0,ρν_v)
+  CH = FT(0.3)
+  CV = FT(0.03)
+  ρν_h = FT(CH * aux.turbulence.Δ)^2 * state.ρ * SH
+  ρν_v = FT(CV * aux.turbulence.Δ)^2 * state.ρ * SV * f_b²
+  return SMatrix{3,3,FT,9}(ρν_h,0,0,0,ρν_h,0,0,0,ρν_v)
 end
 function scaled_momentum_flux_tensor(m::SmagorinskyLilly2D, ρν, S)
-  (-2*ρν) * S
+  -2 * ρν * S
 end

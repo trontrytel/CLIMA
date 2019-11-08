@@ -45,19 +45,13 @@ Assumes the moisture components is in the dry limit.
 struct DryModel <: MoistureModel
 end
 
-vars_aux(::DryModel,FT) = @vars(θ_v::FT)
+vars_aux(::DryModel,FT) = @vars(θ_v::FT, temperature::FT)
 @inline function atmos_nodal_update_aux!(moist::DryModel, atmos::AtmosModel,
                                          state::Vars, aux::Vars, t::Real)
   e_int = internal_energy(moist, atmos.orientation, state, aux)
   TS = PhaseDry(e_int, state.ρ)
-  #=
-  if air_temperature(e_int) < 0 
-    @show(air_temperature(e_int))
-    @show(aux.coord)
-    @show(air_pressure(air_temperature(e_int), state.ρ))
-  end
-  =#
   aux.moisture.θ_v = virtual_pottemp(TS)
+  aux.moisture.temperature = air_temperature(TS)
   nothing
 end
 

@@ -77,6 +77,35 @@ function atmos_boundary_state!(::CentralNumericalFluxDiffusive, bc::NoFluxBC,
 end
 
 """
+    HeldSuarezBC <: BoundaryCondition
+
+Set the momentum at the boundary to be zero.
+"""
+# TODO: This should be fixed later once BCs are figured out (likely want
+# different things here?)
+struct HeldSuarezBC <: BoundaryCondition
+end
+
+function atmos_boundary_state!(::Rusanov, bc::HeldSuarezBC, m::AtmosModel,
+                               stateP::Vars, auxP::Vars, nM, stateM::Vars,
+                               auxM::Vars, bctype, t, _...)
+  FT = eltype(stateM)
+  stateP.ρ      = stateM.ρ
+  stateP.ρu     = SVector(0,0,0)
+end
+
+function atmos_boundary_state!(::CentralNumericalFluxDiffusive, bc::HeldSuarezBC,
+                               m::AtmosModel, stateP::Vars, diffP::Vars,
+                               auxP::Vars, nM, stateM::Vars, diffM::Vars,
+                               auxM::Vars, bctype, t, _...)
+  
+  FT                    = eltype(stateM)
+  stateP.ρ              = stateM.ρ
+  stateP.ρu             = SVector(0,0,0)
+  diffP.ρd_h_tot        = SVector(diffM.ρd_h_tot[1], diffM.ρd_h_tot[2], FT(0))
+end
+
+"""
     InitStateBC <: BoundaryCondition
 
 Set the value at the boundary to match the `init_state!` function. This is

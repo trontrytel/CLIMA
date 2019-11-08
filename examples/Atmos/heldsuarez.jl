@@ -105,8 +105,7 @@ function run(mpicomm, polynomialorder, numelem_horz, numelem_vert,
   # determine the time step
   element_size = (setup.domain_height / numelem_vert)
   acoustic_speed = soundspeed_air(FT(330))
-  lucas_magic_factor = 10 #* 14
-  #lucas_magic_factor = 1
+  lucas_magic_factor = 1
   dt = lucas_magic_factor * element_size / acoustic_speed / polynomialorder ^ 2
 
   Q = init_ode_state(dg, FT(0))
