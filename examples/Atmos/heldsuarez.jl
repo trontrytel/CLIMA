@@ -115,7 +115,7 @@ function run(mpicomm, polynomialorder, numelem_horz, numelem_vert,
                                            linearsolver, Q; dt = dt,
                                            split_nonlinear_linear=false)
 
-  filterorder = 14
+  filterorder = 32
   filter = ExponentialFilter(grid, 0, filterorder)
   cbfilter = EveryXSimulationSteps(3) do
     Filters.apply!(Q, 1:size(Q, 2), grid, filter)
