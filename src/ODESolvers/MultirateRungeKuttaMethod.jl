@@ -48,119 +48,138 @@ Currently only the low storage RK methods can be used as slow solvers
       publisher={Copernicus GmbH}
     }
 """
-mutable struct MultirateRungeKutta{SS, FS, RT} <: ODEs.AbstractODESolver
-  "slow solver"
-  slow_solver::SS
-  "fast solver"
-  fast_solver::FS
-  "time step"
-  dt::RT
-  "time"
-  t::RT
+mutable struct MultirateRungeKutta{SS,FS,RT} <: ODEs.AbstractODESolver
+    "slow solver"
+    slow_solver::SS
+    "fast solver"
+    fast_solver::FS
+    "time step"
+    dt::RT
+    "time"
+    t::RT
 
-  function MultirateRungeKutta(slow_solver::LSRK2N,
-                               fast_solver,
-                               Q=nothing;
-                               dt=ODEs.getdt(slow_solver), t0=slow_solver.t
-                              ) where {AT<:AbstractArray}
-    SS = typeof(slow_solver)
-    FS = typeof(fast_solver)
-    RT = real(eltype(slow_solver.dQ))
-    new{SS, FS, RT}(slow_solver, fast_solver, RT(dt), RT(t0))
-  end
+    function MultirateRungeKutta(
+        slow_solver::LSRK2N,
+        fast_solver,
+        Q = nothing;
+        dt = ODEs.getdt(slow_solver),
+        t0 = slow_solver.t,
+    ) where {AT<:AbstractArray}
+        SS = typeof(slow_solver)
+        FS = typeof(fast_solver)
+        RT = real(eltype(slow_solver.dQ))
+        new{SS,FS,RT}(slow_solver, fast_solver, RT(dt), RT(t0))
+    end
 end
 MRRK = MultirateRungeKutta
 
-function MultirateRungeKutta(solvers::Tuple, Q=nothing;
-                             dt=ODEs.getdt(solvers[1]), t0=solvers[1].t
-                            ) where {AT<:AbstractArray}
-  if length(solvers) < 2
-    error("Must specify atleast two solvers")
-  elseif length(solvers) == 2
-    fast_solver = solvers[2]
-  else
-    fast_solver = MultirateRungeKutta(solvers[2:end], Q; dt = dt, t0=t0)
-  end
+function MultirateRungeKutta(
+    solvers::Tuple,
+    Q = nothing;
+    dt = ODEs.getdt(solvers[1]),
+    t0 = solvers[1].t,
+) where {AT<:AbstractArray}
+    if length(solvers) < 2
+        error("Must specify atleast two solvers")
+    elseif length(solvers) == 2
+        fast_solver = solvers[2]
+    else
+        fast_solver = MultirateRungeKutta(solvers[2:end], Q; dt = dt, t0 = t0)
+    end
 
-  slow_solver = solvers[1]
+    slow_solver = solvers[1]
 
-  MultirateRungeKutta(slow_solver, fast_solver, Q; dt = dt, t0=t0)
+    MultirateRungeKutta(slow_solver, fast_solver, Q; dt = dt, t0 = t0)
 end
 
-function ODEs.dostep!(Q, mrrk::MultirateRungeKutta, param,
-                      timeend::AbstractFloat, adjustfinalstep::Bool)
-  time, dt = mrrk.t, mrrk.dt
-  @assert dt > 0
-  if adjustfinalstep && time + dt > timeend
-    dt = timeend - time
+function ODEs.dostep!(
+    Q,
+    mrrk::MultirateRungeKutta,
+    param,
+    timeend::AbstractFloat,
+    adjustfinalstep::Bool,
+)
+    time, dt = mrrk.t, mrrk.dt
     @assert dt > 0
-  end
+    if adjustfinalstep && time + dt > timeend
+        dt = timeend - time
+        @assert dt > 0
+    end
 
-  ODEs.dostep!(Q, mrrk, param, time, dt)
+    ODEs.dostep!(Q, mrrk, param, time, dt)
 
-  if dt == mrrk.dt
-    mrrk.t += dt
-  else
-    mrrk.t = timeend
-  end
-  return mrrk.t
+    if dt == mrrk.dt
+        mrrk.t += dt
+    else
+        mrrk.t = timeend
+    end
+    return mrrk.t
 end
 
-function ODEs.dostep!(Q, mrrk::MultirateRungeKutta{SS}, param,
-                      time::AbstractFloat, dt::AbstractFloat,
-                      in_slow_δ = nothing, in_slow_rv_dQ = nothing,
-                      in_slow_scaling = nothing) where {SS <: LSRK2N}
-  slow = mrrk.slow_solver
-  fast = mrrk.fast_solver
+function ODEs.dostep!(
+    Q,
+    mrrk::MultirateRungeKutta{SS},
+    param,
+    time::AbstractFloat,
+    dt::AbstractFloat,
+    in_slow_δ = nothing,
+    in_slow_rv_dQ = nothing,
+    in_slow_scaling = nothing,
+) where {SS<:LSRK2N}
+    slow = mrrk.slow_solver
+    fast = mrrk.fast_solver
 
-  slow_rv_dQ = realview(slow.dQ)
+    slow_rv_dQ = realview(slow.dQ)
 
-  threads = 256
-  blocks = div(length(realview(Q)) + threads - 1, threads)
+    threads = 256
+    blocks = div(length(realview(Q)) + threads - 1, threads)
 
-  for slow_s = 1:length(slow.RKA)
+    for slow_s = 1:length(slow.RKA)
     # Currnent slow state time
-    slow_stage_time = time + slow.RKC[slow_s] * dt
+        slow_stage_time = time + slow.RKC[slow_s] * dt
 
     # Evaluate the slow mode
-    slow.rhs!(slow.dQ, Q, param, slow_stage_time, increment = true)
+        slow.rhs!(slow.dQ, Q, param, slow_stage_time, increment = true)
 
-    if in_slow_δ !== nothing
-      slow_scaling = nothing
-      if slow_s == length(slow.RKA)
-        slow_scaling = in_slow_scaling
-      end
+        if in_slow_δ !== nothing
+            slow_scaling = nothing
+            if slow_s == length(slow.RKA)
+                slow_scaling = in_slow_scaling
+            end
       # update solution and scale RHS
-      @launch(device(Q), threads=threads, blocks=blocks,
-              update!(slow_rv_dQ, in_slow_rv_dQ, in_slow_δ, slow_scaling))
-    end
+            @launch(
+                device(Q),
+                threads = threads,
+                blocks = blocks,
+                update!(slow_rv_dQ, in_slow_rv_dQ, in_slow_δ, slow_scaling)
+            )
+        end
 
     # Fractional time for slow stage
-    if slow_s == length(slow.RKA)
-      γ = 1 - slow.RKC[slow_s]
-    else
-      γ = slow.RKC[slow_s + 1] - slow.RKC[slow_s]
-    end
+        if slow_s == length(slow.RKA)
+            γ = 1 - slow.RKC[slow_s]
+        else
+            γ = slow.RKC[slow_s+1] - slow.RKC[slow_s]
+        end
 
     # RKB for the slow with fractional time factor remove (since full
     # integration of fast will result in scaling by γ)
-    slow_δ = slow.RKB[slow_s] / (γ)
+        slow_δ = slow.RKB[slow_s] / (γ)
 
     # RKB for the slow with fractional time factor remove (since full
     # integration of fast will result in scaling by γ)
-    nsubsteps = ODEs.getdt(fast) > 0 ? ceil(Int, γ * dt / ODEs.getdt(fast)) : 1
-    fast_dt = γ * dt / nsubsteps
+        nsubsteps = ODEs.getdt(fast) > 0 ? ceil(Int, γ * dt / ODEs.getdt(fast)) : 1
+        fast_dt = γ * dt / nsubsteps
 
-    for substep = 1:nsubsteps
-      slow_rka = nothing
-      if substep == nsubsteps
-        slow_rka = slow.RKA[slow_s%length(slow.RKA) + 1]
-      end
-      fast_time = slow_stage_time + (substep - 1) * fast_dt
-      ODEs.dostep!(Q, fast, param, fast_time, fast_dt, slow_δ, slow_rv_dQ,
-                   slow_rka)
+        for substep = 1:nsubsteps
+            slow_rka = nothing
+            if substep == nsubsteps
+                slow_rka = slow.RKA[slow_s%length(slow.RKA)+1]
+            end
+            fast_time = slow_stage_time + (substep - 1) * fast_dt
+            ODEs.dostep!(Q, fast, param, fast_time, fast_dt, slow_δ, slow_rv_dQ, slow_rka)
+        end
     end
-  end
 end
 
 end

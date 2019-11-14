@@ -36,21 +36,21 @@ This uses the restarted Generalized Minimal Residual method of Saad and Schultz 
       publisher={SIAM}
     }
 """
-struct GeneralizedMinimalResidual{M, MP1, MMP1, T, AT} <: LS.AbstractIterativeLinearSolver
-  krylov_basis::NTuple{MP1, AT}
-  "Hessenberg matrix"
-  H::MArray{Tuple{MP1, M}, T, 2, MMP1}
-  "rhs of the least squares problem"
-  g0::MArray{Tuple{MP1, 1}, T, 2, MP1}
-  tolerance::MArray{Tuple{1}, T, 1, 1}
+struct GeneralizedMinimalResidual{M,MP1,MMP1,T,AT} <: LS.AbstractIterativeLinearSolver
+    krylov_basis::NTuple{MP1,AT}
+    "Hessenberg matrix"
+    H::MArray{Tuple{MP1,M},T,2,MMP1}
+    "rhs of the least squares problem"
+    g0::MArray{Tuple{MP1,1},T,2,MP1}
+    tolerance::MArray{Tuple{1},T,1,1}
 
-  function GeneralizedMinimalResidual(M, Q::AT, tolerance) where AT
-    krylov_basis = ntuple(i -> similar(Q), M + 1)
-    H = @MArray zeros(M + 1, M)
-    g0 = @MArray zeros(M + 1)
+    function GeneralizedMinimalResidual(M, Q::AT, tolerance) where {AT}
+        krylov_basis = ntuple(i -> similar(Q), M + 1)
+        H = @MArray zeros(M + 1, M)
+        g0 = @MArray zeros(M + 1)
 
-    new{M, M + 1, M * (M + 1), eltype(Q), AT}(krylov_basis, H, g0, (tolerance,))
-  end
+        new{M,M + 1,M * (M + 1),eltype(Q),AT}(krylov_basis, H, g0, (tolerance,))
+    end
 end
 
 const weighted = false
@@ -71,8 +71,8 @@ function LS.initialize!(linearoperator!, Q, Qrhs, solver::GeneralizedMinimalResi
 
     converged = false
     if residual_norm < threshold
-      converged = true
-      return converged, threshold
+        converged = true
+        return converged, threshold
     end
 
     fill!(g0, 0)
@@ -82,65 +82,74 @@ function LS.initialize!(linearoperator!, Q, Qrhs, solver::GeneralizedMinimalResi
     converged, threshold
 end
 
-function LS.doiteration!(linearoperator!, Q, Qrhs,
-                         solver::GeneralizedMinimalResidual{M}, threshold) where M
- 
-  krylov_basis = solver.krylov_basis
-  H = solver.H
-  g0 = solver.g0
+function LS.doiteration!(
+    linearoperator!,
+    Q,
+    Qrhs,
+    solver::GeneralizedMinimalResidual{M},
+    threshold,
+) where {M}
 
-  converged = false
-  residual_norm = typemax(eltype(Q))
-  
-  Ω = LinearAlgebra.Rotation{eltype(Q)}([])
-  j = 1
-  for outer j = 1:M
+    krylov_basis = solver.krylov_basis
+    H = solver.H
+    g0 = solver.g0
+
+    converged = false
+    residual_norm = typemax(eltype(Q))
+
+    Ω = LinearAlgebra.Rotation{eltype(Q)}([])
+    j = 1
+    for outer j = 1:M
 
     # Arnoldi using the Modified Gram Schmidt orthonormalization
-    linearoperator!(krylov_basis[j + 1], krylov_basis[j])
-    for i = 1:j
-      H[i, j] = dot(krylov_basis[j + 1], krylov_basis[i], weighted)
-      @. krylov_basis[j + 1] -= H[i, j] * krylov_basis[i]
-    end
-    H[j + 1, j] = norm(krylov_basis[j + 1], weighted)
-    krylov_basis[j + 1] ./= H[j + 1, j]
-   
+        linearoperator!(krylov_basis[j+1], krylov_basis[j])
+        for i = 1:j
+            H[i, j] = dot(krylov_basis[j+1], krylov_basis[i], weighted)
+            @. krylov_basis[j+1] -= H[i, j] * krylov_basis[i]
+        end
+        H[j+1, j] = norm(krylov_basis[j+1], weighted)
+        krylov_basis[j+1] ./= H[j+1, j]
+
     # apply the previous Givens rotations to the new column of H
-    @views H[1:j, j:j] .= Ω * H[1:j, j:j]
+        @views H[1:j, j:j] .= Ω * H[1:j, j:j]
 
     # compute a new Givens rotation to zero out H[j + 1, j]
-    G, _ = givens(H, j, j + 1, j)
+        G, _ = givens(H, j, j + 1, j)
 
     # apply the new rotation to H and the rhs
-    H .= G * H
-    g0 .= G * g0
+        H .= G * H
+        g0 .= G * g0
 
     # compose the new rotation with the others
-    Ω = lmul!(G, Ω)
+        Ω = lmul!(G, Ω)
 
-    residual_norm = abs(g0[j + 1])
+        residual_norm = abs(g0[j+1])
 
-    if residual_norm < threshold
-      converged = true
-      break
+        if residual_norm < threshold
+            converged = true
+            break
+        end
     end
-  end
 
   # solve the triangular system
-  y = SVector{j}(@views UpperTriangular(H[1:j, 1:j]) \ g0[1:j])
+    y = SVector{j}(@views UpperTriangular(H[1:j, 1:j]) \ g0[1:j])
 
   ## compose the solution
-  rv_Q = realview(Q)
-  rv_krylov_basis = realview.(krylov_basis)
-  threads = 256
-  blocks = div(length(rv_Q) + threads - 1, threads)
-  @launch(device(Q), threads = threads, blocks = blocks,
-          LS.linearcombination!(rv_Q, y, rv_krylov_basis, true))
+    rv_Q = realview(Q)
+    rv_krylov_basis = realview.(krylov_basis)
+    threads = 256
+    blocks = div(length(rv_Q) + threads - 1, threads)
+    @launch(
+        device(Q),
+        threads = threads,
+        blocks = blocks,
+        LS.linearcombination!(rv_Q, y, rv_krylov_basis, true)
+    )
 
   # if not converged restart
-  converged || LS.initialize!(linearoperator!, Q, Qrhs, solver)
-  
-  (converged, j, residual_norm)
+    converged || LS.initialize!(linearoperator!, Q, Qrhs, solver)
+
+    (converged, j, residual_norm)
 end
 
 end

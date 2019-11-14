@@ -23,11 +23,13 @@ function IOstrings_outpath_name(problem_name, grid_resolution)
         ds = grid_resolution[i]
         outpath_string = string(outpath_string, ds, "mx")
     end
-    current_time = string(Dates.format(convert(Dates.DateTime, Dates.now()), Dates.dateformat"yyyymmdd_HHMMSS"))
-    OUTPATH = string("./output/",problem_name, "/", outpath_string,"_", current_time)
+    current_time = string(Dates.format(
+        convert(Dates.DateTime, Dates.now()),
+        Dates.dateformat"yyyymmdd_HHMMSS",
+    ))
+    OUTPATH = string("./output/", problem_name, "/", outpath_string, "_", current_time)
 
     mkpath(OUTPATH)
-    
+
     return OUTPATH
 end
-

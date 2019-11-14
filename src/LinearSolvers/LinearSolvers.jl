@@ -38,13 +38,13 @@ abstract type AbstractIterativeLinearSolver <: AbstractLinearSolver end
 Sets the tolerance of the iterative linear solver `solver` to `tolerance`.
 """
 settolerance!(solver::AbstractIterativeLinearSolver, tolerance) =
-  (solver.tolerance[1] = tolerance)
+    (solver.tolerance[1] = tolerance)
 
 doiteration!(Q, Qrhs, solver::AbstractIterativeLinearSolver, tolerance) =
-  throw(MethodError(doiteration!, (Q, Qrhs, solver, tolerance)))
+    throw(MethodError(doiteration!, (Q, Qrhs, solver, tolerance)))
 
 initialize!(Q, Qrhs, solver::AbstractIterativeLinearSolver) =
-  throw(MethodError(initialize!, (Q, Qrhs, solver))) 
+    throw(MethodError(initialize!, (Q, Qrhs, solver)))
 
 """
     linearsolve!(linearoperator!, Q, Qrhs, solver::AbstractIterativeLinearSolver)
@@ -59,26 +59,31 @@ Solves a linear problem defined by the `linearoperator!` function and the state
 using the `solver` and the initial guess `Q`. After the call `Q` contains the solution.
 """
 function linearsolve!(linearoperator!, Q, Qrhs, solver::AbstractIterativeLinearSolver)
-  converged = false
-  iters = 0
+    converged = false
+    iters = 0
 
-  converged, threshold = initialize!(linearoperator!, Q, Qrhs, solver)
-  converged && return iters
+    converged, threshold = initialize!(linearoperator!, Q, Qrhs, solver)
+    converged && return iters
 
-  while !converged
-    converged, inner_iters, residual_norm = 
-      doiteration!(linearoperator!, Q, Qrhs, solver, threshold)
+    while !converged
+        converged, inner_iters, residual_norm = doiteration!(
+            linearoperator!,
+            Q,
+            Qrhs,
+            solver,
+            threshold,
+        )
 
-    iters += inner_iters
+        iters += inner_iters
 
-    if !isfinite(residual_norm)
-      error("norm of residual is not finite after $iters iterations of `doiteration!`")
+        if !isfinite(residual_norm)
+            error("norm of residual is not finite after $iters iterations of `doiteration!`")
+        end
+
+        achieved_tolerance = residual_norm / threshold * solver.tolerance[1]
     end
-    
-    achieved_tolerance = residual_norm / threshold * solver.tolerance[1]
-  end
-  
-  iters
+
+    iters
 end
 
 end

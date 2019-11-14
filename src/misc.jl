@@ -8,4 +8,3 @@ export haspkg
 Determines if the package `pkgname` available in the current environment.
 """
 haspkg(pkgname::String) = haskey(Pkg.installed(), pkgname)
-  

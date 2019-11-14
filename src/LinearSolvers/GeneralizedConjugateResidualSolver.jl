@@ -37,27 +37,27 @@ This uses the restarted Generalized Conjugate Residual method of Eisenstat (1983
       publisher={SIAM}
     }
 """
-struct GeneralizedConjugateResidual{K, T, AT} <: LS.AbstractIterativeLinearSolver
-  residual::AT
-  L_residual::AT
-  p::NTuple{K, AT}
-  L_p::NTuple{K, AT}
-  alpha::MArray{Tuple{K}, T, 1, K}
-  normsq::MArray{Tuple{K}, T, 1, K}
-  tolerance::MArray{Tuple{1}, T, 1, 1}
+struct GeneralizedConjugateResidual{K,T,AT} <: LS.AbstractIterativeLinearSolver
+    residual::AT
+    L_residual::AT
+    p::NTuple{K,AT}
+    L_p::NTuple{K,AT}
+    alpha::MArray{Tuple{K},T,1,K}
+    normsq::MArray{Tuple{K},T,1,K}
+    tolerance::MArray{Tuple{1},T,1,1}
 
-  function GeneralizedConjugateResidual(K, Q::AT, tolerance) where AT
-    T = eltype(Q)
+    function GeneralizedConjugateResidual(K, Q::AT, tolerance) where {AT}
+        T = eltype(Q)
 
-    residual = similar(Q)
-    L_residual = similar(Q)
-    p = ntuple(i -> similar(Q), K)
-    L_p = ntuple(i -> similar(Q), K)
-    alpha = @MArray zeros(K)
-    normsq = @MArray zeros(K)
+        residual = similar(Q)
+        L_residual = similar(Q)
+        p = ntuple(i -> similar(Q), K)
+        L_p = ntuple(i -> similar(Q), K)
+        alpha = @MArray zeros(K)
+        normsq = @MArray zeros(K)
 
-    new{K, T, AT}(residual, L_residual, p, L_p, alpha, normsq, (tolerance,))
-  end
+        new{K,T,AT}(residual, L_residual, p, L_p, alpha, normsq, (tolerance,))
+    end
 end
 
 const weighted = false
@@ -72,77 +72,98 @@ function LS.initialize!(linearoperator!, Q, Qrhs, solver::GeneralizedConjugateRe
     threshold = solver.tolerance[1] * norm(Qrhs, weighted)
     linearoperator!(residual, Q)
     residual .-= Qrhs
-    
+
     converged = false
     residual_norm = norm(residual, weighted)
     if residual_norm < threshold
-      converged = true
-      return converged, threshold
+        converged = true
+        return converged, threshold
     end
-    
+
     p[1] .= residual
     linearoperator!(L_p[1], p[1])
 
     converged, threshold
 end
 
-function LS.doiteration!(linearoperator!, Q, Qrhs,
-                         solver::GeneralizedConjugateResidual{K}, threshold) where K
- 
-  residual = solver.residual
-  p = solver.p
-  L_residual = solver.L_residual
-  L_p = solver.L_p
-  normsq = solver.normsq
-  alpha = solver.alpha
-  
-  residual_norm = typemax(eltype(Q))
-  for k = 1:K
-    normsq[k] = norm(L_p[k], weighted) ^ 2
-    beta = -dot(residual, L_p[k], weighted) / normsq[k]
+function LS.doiteration!(
+    linearoperator!,
+    Q,
+    Qrhs,
+    solver::GeneralizedConjugateResidual{K},
+    threshold,
+) where {K}
 
-    Q .+= beta * p[k]
-    residual .+= beta * L_p[k]
+    residual = solver.residual
+    p = solver.p
+    L_residual = solver.L_residual
+    L_p = solver.L_p
+    normsq = solver.normsq
+    alpha = solver.alpha
 
-    residual_norm = norm(residual, weighted)
+    residual_norm = typemax(eltype(Q))
+    for k = 1:K
+        normsq[k] = norm(L_p[k], weighted)^2
+        beta = -dot(residual, L_p[k], weighted) / normsq[k]
 
-    if residual_norm <= threshold
-      return (true, k, residual_norm)
+        Q .+= beta * p[k]
+        residual .+= beta * L_p[k]
+
+        residual_norm = norm(residual, weighted)
+
+        if residual_norm <= threshold
+            return (true, k, residual_norm)
+        end
+
+        linearoperator!(L_residual, residual)
+
+        for l = 1:k
+            alpha[l] = -dot(L_residual, L_p[l], weighted) / normsq[l]
+        end
+
+        if k < K
+            rv_nextp = realview(p[k+1])
+            rv_L_nextp = realview(L_p[k+1])
+        else # restart
+            rv_nextp = realview(p[1])
+            rv_L_nextp = realview(L_p[1])
+        end
+
+        rv_residual = realview(residual)
+        rv_p = realview.(p)
+        rv_L_p = realview.(L_p)
+        rv_L_residual = realview(L_residual)
+
+        threads = 256
+        blocks = div(length(rv_nextp) + threads - 1, threads)
+
+        T = eltype(alpha)
+        @launch(
+            device(Q),
+            threads = threads,
+            blocks = blocks,
+            LS.linearcombination!(
+                rv_nextp,
+                (one(T), alpha[1:k]...),
+                (rv_residual, rv_p[1:k]...),
+                false,
+            )
+        )
+
+        @launch(
+            device(Q),
+            threads = threads,
+            blocks = blocks,
+            LS.linearcombination!(
+                rv_L_nextp,
+                (one(T), alpha[1:k]...),
+                (rv_L_residual, rv_L_p[1:k]...),
+                false,
+            )
+        )
     end
 
-    linearoperator!(L_residual, residual)
-  
-    for l = 1:k
-      alpha[l] = -dot(L_residual, L_p[l], weighted) / normsq[l]
-    end
-
-    if k < K
-      rv_nextp = realview(p[k + 1])
-      rv_L_nextp = realview(L_p[k + 1])
-    else # restart
-      rv_nextp = realview(p[1])
-      rv_L_nextp = realview(L_p[1])
-    end
-    
-    rv_residual = realview(residual)
-    rv_p = realview.(p)
-    rv_L_p = realview.(L_p)
-    rv_L_residual = realview(L_residual)
-
-    threads = 256
-    blocks = div(length(rv_nextp) + threads - 1, threads)
-
-    T = eltype(alpha)
-    @launch(device(Q), threads = threads, blocks = blocks,
-            LS.linearcombination!(rv_nextp, (one(T), alpha[1:k]...),
-                                  (rv_residual, rv_p[1:k]...), false))
-    
-    @launch(device(Q), threads = threads, blocks = blocks,
-            LS.linearcombination!(rv_L_nextp, (one(T), alpha[1:k]...),
-                                  (rv_L_residual, rv_L_p[1:k]...), false))
-  end
-  
-  (false, K, residual_norm)
+    (false, K, residual_norm)
 end
 
 end

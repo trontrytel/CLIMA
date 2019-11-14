@@ -1,14 +1,13 @@
 using Test
 
 for submodule in [
-                  "FiniteDifferenceGrids",
-                  "DomainDecomp",
-                  "StateVecs",
-                  "TDMA",
-                  "PDEs",
+    "FiniteDifferenceGrids",
+    "DomainDecomp",
+    "StateVecs",
+    "TDMA",
+    "PDEs",
                   # "BOMEX",
-                  ]
-
-  println("Testing $submodule")
-  include(joinpath(submodule*".jl"))
+]
+    println("Testing $submodule")
+    include(joinpath(submodule * ".jl"))
 end

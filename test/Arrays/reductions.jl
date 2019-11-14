@@ -9,41 +9,45 @@ MPI.Initialized() || MPI.Init()
 const mpicomm = MPI.COMM_WORLD
 
 @static if haspkg("CuArrays")
-  using CuArrays
+    using CuArrays
   # make sure that broadcasting is not being done by scalar indexing into CuArrays
-  CuArrays.allowscalar(false)
-  ArrayType = CuArray
+    CuArrays.allowscalar(false)
+    ArrayType = CuArray
 else
-  ArrayType = Array
+    ArrayType = Array
 end
 
 mpisize = MPI.Comm_size(mpicomm)
 
 @testset "MPIStateArray reductions" begin
 
-  localsize = (4, 6, 8)
+    localsize = (4, 6, 8)
 
-  A = Array{Float32}(reshape(1:prod(localsize), localsize))
-  globalA = vcat([A for _ in 1:mpisize]...)
+    A = Array{Float32}(reshape(1:prod(localsize), localsize))
+    globalA = vcat([A for _ = 1:mpisize]...)
 
-  QA = MPIStateArray{Float32}(mpicomm, ArrayType, localsize...)
-  QA .= A
+    QA = MPIStateArray{Float32}(mpicomm, ArrayType, localsize...)
+    QA .= A
 
 
-  @test norm(QA, 1)   ≈ norm(globalA, 1)
-  @test norm(QA)      ≈ norm(globalA)
-  @test norm(QA, Inf) ≈ norm(globalA, Inf)
+    @test norm(QA, 1) ≈ norm(globalA, 1)
+    @test norm(QA) ≈ norm(globalA)
+    @test norm(QA, Inf) ≈ norm(globalA, Inf)
 
-  @test norm(QA; dims=(1,3))      ≈ mapslices(norm, globalA; dims=(1,3))
-  @test norm(QA, 1; dims=(1,3))   ≈ mapslices(S -> norm(S, 1), globalA, dims=(1,3))
-  @test norm(QA, Inf; dims=(1,3)) ≈ mapslices(S -> norm(S, Inf), globalA, dims=(1,3))
+    @test norm(QA; dims = (1, 3)) ≈ mapslices(norm, globalA; dims = (1, 3))
+    @test norm(QA, 1; dims = (1, 3)) ≈ mapslices(S -> norm(S, 1), globalA, dims = (1, 3))
+    @test norm(QA, Inf; dims = (1, 3)) ≈ mapslices(
+        S -> norm(S, Inf),
+        globalA,
+        dims = (1, 3),
+    )
 
-  B = Array{Float32}(reshape(reverse(1:prod(localsize)), localsize))
-  globalB = vcat([B for _ in 1:mpisize]...)
+    B = Array{Float32}(reshape(reverse(1:prod(localsize)), localsize))
+    globalB = vcat([B for _ = 1:mpisize]...)
 
-  QB = similar(QA)
-  QB .= B
+    QB = similar(QA)
+    QB .= B
 
-  @test isapprox(euclidean_distance(QA, QB), norm(globalA .- globalB))
-  @test isapprox(dot(QA, QB), dot(globalA, globalB))
+    @test isapprox(euclidean_distance(QA, QB), norm(globalA .- globalB))
+    @test isapprox(dot(QA, QB), dot(globalA, globalB))
 end

@@ -14,12 +14,16 @@ if not specified the fields names will be `"Q1"` through `"Qk"` where `k` is the
 number of states in `Q`, i.e., `k = size(Q,2)`.
 
 """
-function writevtk(prefix, Q::MPIStateArray, dg::Union{DGBalanceLaw,DGModel},
-                  fieldnames=nothing)
-  vgeo = dg.grid.vgeo
-  host_array = Array ∈ typeof(Q).parameters
-  (h_vgeo, h_Q) = host_array ? (vgeo, Q.data) : (Array(vgeo), Array(Q))
-  writevtk_helper(prefix, h_vgeo, h_Q, dg.grid, fieldnames)
+function writevtk(
+    prefix,
+    Q::MPIStateArray,
+    dg::Union{DGBalanceLaw,DGModel},
+    fieldnames = nothing,
+)
+    vgeo = dg.grid.vgeo
+    host_array = Array ∈ typeof(Q).parameters
+    (h_vgeo, h_Q) = host_array ? (vgeo, Q.data) : (Array(vgeo), Array(Q))
+    writevtk_helper(prefix, h_vgeo, h_Q, dg.grid, fieldnames)
 end
 
 """
@@ -40,14 +44,19 @@ If `auxfieldnames === nothing` then the fields names will be `"aux1"` through
 size(auxstate,2)`.
 
 """
-function writevtk(prefix, Q::MPIStateArray, dg::Union{DGBalanceLaw,DGModel},
-                  fieldnames, auxstate, auxfieldnames)
-  vgeo = dg.grid.vgeo
-  host_array = Array ∈ typeof(Q).parameters
-  (h_vgeo, h_Q, h_aux) = host_array ? (vgeo, Q.data, auxstate.data) :
-                                      (Array(vgeo), Array(Q), Array(auxstate))
-  writevtk_helper(prefix, h_vgeo, h_Q, dg.grid, fieldnames, h_aux,
-                  auxfieldnames)
+function writevtk(
+    prefix,
+    Q::MPIStateArray,
+    dg::Union{DGBalanceLaw,DGModel},
+    fieldnames,
+    auxstate,
+    auxfieldnames,
+)
+    vgeo = dg.grid.vgeo
+    host_array = Array ∈ typeof(Q).parameters
+    (h_vgeo, h_Q, h_aux) = host_array ? (vgeo, Q.data, auxstate.data) :
+                           (Array(vgeo), Array(Q), Array(auxstate))
+    writevtk_helper(prefix, h_vgeo, h_Q, dg.grid, fieldnames, h_aux, auxfieldnames)
 end
 
 
@@ -56,39 +65,59 @@ end
 
 Internal helper function for `writevtk`
 """
-function writevtk_helper(prefix, vgeo::Array, Q::Array, grid,
-                         fieldnames, auxstate=nothing, auxfieldnames=nothing)
+function writevtk_helper(
+    prefix,
+    vgeo::Array,
+    Q::Array,
+    grid,
+    fieldnames,
+    auxstate = nothing,
+    auxfieldnames = nothing,
+)
 
-  dim = dimensionality(grid)
-  N = polynomialorder(grid)
-  Nq  = N+1
+    dim = dimensionality(grid)
+    N = polynomialorder(grid)
+    Nq = N + 1
 
-  nelem = size(Q)[end]
-  Xid = (grid.x1id, grid.x2id, grid.x3id)
-  X = ntuple(j->reshape((@view vgeo[:, Xid[j], :]),
-                        ntuple(j->Nq, dim)...,
-                        nelem), dim)
-  if fieldnames == nothing
-    fields = ntuple(i->("Q$i", reshape((@view Q[:, i, :]),
-                                       ntuple(j->Nq, dim)..., nelem)),
-                    size(Q, 2))
-  else
-    fields = ntuple(i->(fieldnames[i], reshape((@view Q[:, i, :]),
-                                               ntuple(j->Nq, dim)..., nelem)),
-                    size(Q, 2))
-  end
-  if auxstate !== nothing
-    if auxfieldnames === nothing
-      auxfields = ntuple(i->("aux$i", reshape((@view auxstate[:, i, :]),
-                                              ntuple(j->Nq, dim)..., nelem)),
-                         size(auxstate, 2))
+    nelem = size(Q)[end]
+    Xid = (grid.x1id, grid.x2id, grid.x3id)
+    X = ntuple(
+        j -> reshape((@view vgeo[:, Xid[j], :]), ntuple(j -> Nq, dim)..., nelem),
+        dim,
+    )
+    if fieldnames == nothing
+        fields = ntuple(
+            i -> ("Q$i", reshape((@view Q[:, i, :]), ntuple(j -> Nq, dim)..., nelem)),
+            size(Q, 2),
+        )
     else
-      auxfields = ntuple(i->(auxfieldnames[i], reshape((@view auxstate[:, i, :]),
-                                                       ntuple(j->Nq, dim)...,
-                                                       nelem)),
-                         size(auxstate, 2))
+        fields = ntuple(
+            i -> (
+                fieldnames[i],
+                reshape((@view Q[:, i, :]), ntuple(j -> Nq, dim)..., nelem),
+            ),
+            size(Q, 2),
+        )
     end
-    fields = (fields..., auxfields...)
-  end
-  writemesh(prefix, X...; fields=fields, realelems=grid.topology.realelems)
+    if auxstate !== nothing
+        if auxfieldnames === nothing
+            auxfields = ntuple(
+                i -> (
+                    "aux$i",
+                    reshape((@view auxstate[:, i, :]), ntuple(j -> Nq, dim)..., nelem),
+                ),
+                size(auxstate, 2),
+            )
+        else
+            auxfields = ntuple(
+                i -> (
+                    auxfieldnames[i],
+                    reshape((@view auxstate[:, i, :]), ntuple(j -> Nq, dim)..., nelem),
+                ),
+                size(auxstate, 2),
+            )
+        end
+        fields = (fields..., auxfields...)
+    end
+    writemesh(prefix, X...; fields = fields, realelems = grid.topology.realelems)
 end
