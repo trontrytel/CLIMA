@@ -111,7 +111,7 @@ function run(mpicomm,
              problem_name, 
              OUTPATH, 
              aspectratio, 
-             exp_step, 
+             IsExplicit, 
              LinearModel,
              SolverMethod)
 
@@ -171,12 +171,12 @@ function run(mpicomm,
 
   # ---------------- SOLVER -----------------------#
 
-  if exp_step == 1
+  if IsExplicit == 1
     numberofsteps = convert(Int64, cld(timeend, dt_exp))
     dt_exp = timeend / numberofsteps
     @info "EXP timestepper" dt_exp numberofsteps dt_exp*numberofsteps timeend
     solver = LSRK54CarpenterKennedy(dg, Q; dt = dt_exp, t0 = 0)
-    @timeit to "solve! EX RTB - $LinearModel $SolverMethod $aspectratio $dt_exp $timeend" solve!(Q, solver; timeend=timeend, callbacks=())
+    @timeit to "solve! EX RTB - Explicit LSRK54CarpenterKennedy $aspectratio $dt_exp $timeend" solve!(Q, solver; numberofsteps=numberofsteps, callbacks=(),adjustfinalstep=false)
   else
     numberofsteps = convert(Int64, cld(timeend, dt_imex))
     dt_imex = timeend / numberofsteps
@@ -217,76 +217,89 @@ let
       device!(MPI.Comm_rank(mpicomm) % length(devices()))
   end
  # @testset "$(@__FILE__)" for ArrayType in ArrayTypes
- aspectratios = (8,)
- exp_step = (1,)
- linearmodels= (AtmosAcousticLinearModel,)#, AtmosAcousticGravityLinearModel)
+ aspectratios = (1,2,4,8,16,32,50,)
+ exp_step = (0,1,)
+ LinearModels = (AtmosAcousticGravityLinearModel,)#, AtmosAcousticGravityLinearModel)
  IMEXSolverMethods = (ARK548L2SA2KennedyCarpenter,)
- for SolverMethod in IMEXSolverMethods
+ FloatType = (Float32,)
+ for explicit in exp_step
    for ArrayType in ArrayTypes 
-     for LinearModel in linearmodels 
-       for aspectratio in aspectratios
-         for explicit in exp_step
-            # Problem type
-            FT = Float32
-            # DG polynomial order
-            N = 4
-            # User defined domain parameters
-            Δh = 35
-            Δv = Δh/aspectratio
-            xmin, xmax = 0, 1500
-            ymin, ymax = 0, 1500
-            zmin, zmax = 0, 1500
+     for LinearModel in LinearModels 
+       for SolverMethod in IMEXSolverMethods
+         for aspectratio in aspectratios
+           for FT in FloatType
+              # Problem type
+              # DG polynomial order
+              N = 4
+              # User defined domain parameters
+              Δh = 35
+              Δv = Δh/aspectratio
+              xmin, xmax = 0, 1500
+              ymin, ymax = 0, 1500
+              zmin, zmax = 0, 1500
 
-            grid_resolution = [Δh, Δh, Δv]
-            domain_size     = [xmin, xmax, ymin, ymax, zmin, zmax]
-            dim = length(grid_resolution)
+              grid_resolution = [Δh, Δh, Δv]
+              domain_size     = [xmin, xmax, ymin, ymax, zmin, zmax]
+              dim = length(grid_resolution)
 
-             brickrange = (grid1d(xmin, xmax, elemsize=FT(grid_resolution[1])*N),
-                           grid1d(ymin, ymax, elemsize=FT(grid_resolution[2])*N),
-                           grid1d(zmin, zmax, elemsize=FT(grid_resolution[end])*N))
-                
-            zsponge = FT(1200.0)
+               brickrange = (grid1d(xmin, xmax, elemsize=FT(grid_resolution[1])*N),
+                             grid1d(ymin, ymax, elemsize=FT(grid_resolution[2])*N),
+                             grid1d(zmin, zmax, elemsize=FT(grid_resolution[end])*N))
+                  
+              zsponge = FT(1200.0)
 
-            topl = StackedBrickTopology(mpicomm, brickrange,
-                                        periodicity = (true, true, false),
-                                        boundary=((0,0),(0,0),(1,2)))
+              topl = StackedBrickTopology(mpicomm, brickrange,
+                                          periodicity = (true, true, false),
+                                          boundary=((0,0),(0,0),(1,2)))
 
-            problem_name = "rising_bubble"
-            dt_exp = min(Δv/soundspeed_air(FT(330))/N * FT(0.9), Δh/soundspeed_air(FT(330))/N * FT(0.9))
-            dt_imex = Δh/soundspeed_air(FT(330))/N * FT(0.9)
-            timeend = FT(0.5)
+              problem_name = "rising_bubble"
+              dt_exp = min(Δv/soundspeed_air(FT(330))/N * FT(0.8), Δh/soundspeed_air(FT(330))/N * FT(0.8))
+              dt_imex = Δh/soundspeed_air(FT(330))/N * FT(0.8)
+              timeend = FT(1)
 
-            #Create unique output path directory:
-            OUTPATH = IOstrings_outpath_name(problem_name, grid_resolution)
-            #open diagnostics file and write header:
-            mpirank = MPI.Comm_rank(MPI.COMM_WORLD)
-            C_smag = FT(0.23)
-              @info @sprintf """Starting
-              ArrayType                 = %s
-              ODE_Solver                = %s
-              LinearModel               = %s
-              dt_exp                    = %.5e
-              dt_imp                    = %.5e
-              dt_ratio                  = %.3e
-              Δh/Δv                     = %.5e
-              """ ArrayType SolverMethod LinearModel dt_exp dt_imex dt_imex/dt_exp aspectratio
-            result1 = run(mpicomm, 
-                          ArrayType, 
-                          dim, 
-                          topl,
-                          N, 
-                          timeend, 
-                          FT, 
-                          dt_exp, 
-                          dt_imex, 
-                          zmax, 
-                          zsponge, 
-                          problem_name, 
-                          OUTPATH, 
-                          aspectratio, 
-                          explicit, 
-                          LinearModel,
-                          SolverMethod)
+              #Create unique output path directory:
+              OUTPATH = IOstrings_outpath_name(problem_name, grid_resolution)
+              #open diagnostics file and write header:
+              mpirank = MPI.Comm_rank(MPI.COMM_WORLD)
+              C_smag = FT(0.23)
+              if explicit == 1
+                @info @sprintf """Starting
+                ArrayType                 = %s
+                ODE_Solver                = LSRK54CarpenterKennedy
+                LinearModel               = None
+                dt_exp                    = %.5e
+                dt_ratio                  = -N/A-
+                Δh/Δv                     = %.5e
+                """ ArrayType dt_exp aspectratio
+              else
+                @info @sprintf """Starting
+                ArrayType                 = %s
+                ODE_Solver                = %s
+                LinearModel               = %s
+                dt_exp                    = %.5e
+                dt_imp                    = %.5e
+                dt_ratio                  = %.3e
+                Δh/Δv                     = %.5e
+                """ ArrayType SolverMethod LinearModel dt_exp dt_imex dt_imex/dt_exp aspectratio
+              end
+              result1 = run(mpicomm, 
+                            ArrayType, 
+                            dim, 
+                            topl,
+                            N, 
+                            timeend, 
+                            FT, 
+                            dt_exp, 
+                            dt_imex, 
+                            zmax, 
+                            zsponge, 
+                            problem_name, 
+                            OUTPATH, 
+                            aspectratio, 
+                            explicit, 
+                            LinearModel,
+                            SolverMethod)
+            end
           end
         end
       end
