@@ -87,11 +87,17 @@ struct SmagorinskyLilly{FT} <: TurbulenceClosure
   C_smag::FT
 end
 
-vars_aux(::SmagorinskyLilly,T) = @vars(Δ::T)
+function vars_aux(::SmagorinskyLilly,T)
+  @vars begin
+    Δ::T
+    Ri::T
+  end
+end
 vars_gradient(::SmagorinskyLilly,T) = @vars(θ_v::T)
 
 function atmos_init_aux!(::SmagorinskyLilly, ::AtmosModel, aux::Vars, geom::LocalGeometry)
   aux.turbulence.Δ = lengthscale(geom)
+  aux.turbulence.Ri = lengthscale(geom)
 end
 
 function gradvariables!(m::SmagorinskyLilly, transform::Vars, state::Vars, aux::Vars, t::Real)
