@@ -244,19 +244,21 @@ function run(mpicomm, ArrayType, dim, topl, N, timeend, FT, dt, C_smag, LHF, SHF
 
   # Filter (Exponential via Callback)
   filterorder = 14
-  filter = ExponentialFilter(grid, 0, filterorder)
   cbexpfilter = EveryXSimulationSteps(1) do
-    Filters.apply!(Q, 1:size(Q, 2), grid, filter)
+    # Applies exponential filter to all prognostic variables
+    Filters.apply!(Q, 1:size(Q, 2), grid,ExponentialFilter(grid, 0, filterorder))
     nothing
   end
 
-  # Filter (TMAR via Callback : Applied positivity preservation to prognostic ρq_tot only.)
+  # Filter (TMAR via Callback)
   cbtmarfilter = EveryXSimulationSteps(1) do
+    # Applies positivity cutoff to ρq_tot only
     Filters.apply!(Q, 6, disc.grid, TMARFilter())
     nothing
   end
 
-  solve!(Q, lsrk; timeend=timeend, callbacks=(cbinfo, cbvtk, cbdiagnostics, cbexpfilter, cbTMARfilter))
+  # Optional callback (filters) included
+  solve!(Q, lsrk; timeend=timeend, callbacks=(cbinfo, cbvtk, cbdiagnostics, cbexpfilter, cbtmarfilter))
 
   # Get statistics at the end of the run
   sim_time_str = string(ODESolvers.gettime(lsrk))
