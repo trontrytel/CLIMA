@@ -2,6 +2,7 @@ using MPI
 using CLIMA
 using CLIMA.Mesh.Topologies
 using CLIMA.Mesh.Grids
+using CLIMA.Mesh.Filters
 using CLIMA.DGmethods
 using CLIMA.DGmethods.NumericalFluxes
 using CLIMA.Diagnostics
@@ -241,8 +242,21 @@ function run(mpicomm, ArrayType, dim, topl, N, timeend, FT, dt, C_smag, LHF, SHF
                        xmax, ymax, out_dir)
   end
 
-  #solve!(Q, lsrk; timeend=timeend, callbacks=(cbinfo, cbvtk, cbdiagnostics))
-  solve!(Q, lsrk; timeend=timeend, callbacks=(cbinfo, cbvtk, cbdiagnostics))
+  # Filter (Exponential via Callback)
+  filterorder = 14
+  filter = ExponentialFilter(grid, 0, filterorder)
+  cbexpfilter = EveryXSimulationSteps(1) do
+    Filters.apply!(Q, 1:size(Q, 2), grid, filter)
+    nothing
+  end
+
+  # Filter (TMAR via Callback : Applied positivity preservation to prognostic ρq_tot only.)
+  cbtmarfilter = EveryXSimulationSteps(1) do
+    Filters.apply!(Q, 6, disc.grid, TMARFilter())
+    nothing
+  end
+
+  solve!(Q, lsrk; timeend=timeend, callbacks=(cbinfo, cbvtk, cbdiagnostics, cbexpfilter, cbTMARfilter))
 
   # Get statistics at the end of the run
   sim_time_str = string(ODESolvers.gettime(lsrk))
