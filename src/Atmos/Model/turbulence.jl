@@ -155,7 +155,7 @@ function dynamic_viscosity_tensor(m::SmagorinskyLilly, S, state::Vars, diffusive
   # ρν = (Cₛ * Δ * f_b)² * √(2S:S)
   FT = eltype(state)
   @inbounds normS = strain_rate_magnitude(S)
-  f_b² = squared_buoyancy_correction(normS, ∇transform, aux)
+  f_b² = 1 #squared_buoyancy_correction(normS, ∇transform, aux)
   diffusive.turbulence.BR = f_b²
   # Return Buoyancy-adjusted Smagorinsky Coefficient (ρ scaled)
    state.ρ * normS * f_b² * FT(m.C_smag * aux.turbulence.Δ)^2

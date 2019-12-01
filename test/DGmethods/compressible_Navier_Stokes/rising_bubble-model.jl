@@ -3,6 +3,7 @@ using MPI
 using CLIMA
 using CLIMA.Mesh.Topologies
 using CLIMA.Mesh.Grids
+using CLIMA.Mesh.Filters
 using CLIMA.Mesh.Geometry
 using CLIMA.DGmethods
 using CLIMA.DGmethods.NumericalFluxes
@@ -38,15 +39,15 @@ if !@isdefined integration_testing
 end
 
 # -------------- Problem constants ------------------- # 
-const (xmin,xmax)      = (0,1000)
+const (xmin,xmax)      = (0,3000)
 const (ymin,ymax)      = (0,400)
-const (zmin,zmax)      = (0,1000)
-const Ne        = (10,2,10)
+const (zmin,zmax)      = (0,3000)
+const Ne        = (30,5,30)
 const polynomialorder = 4
 const dim       = 3
-const dt        = 0.01
-const timeend   = 10dt
-# ------------- Initial condition function ----------- # 
+const dt        = 0.009
+const timeend   = 1200
+# ------------- Initial condition function ----------- #
 """
 @article{doi:10.1175/1520-0469(1993)050<1865:BCEWAS>2.0.CO;2,
 author = {Robert, A},
@@ -69,15 +70,15 @@ function Initialise_Rising_Bubble!(state::Vars, aux::Vars, (x1,x2,x3), t)
   γ::FT         = c_p / c_v
   p0::FT        = MSLP
   
-  xc::FT        = 500
-  zc::FT        = 260
+  xc::FT        = 1500
+  zc::FT        = 1000
   r             = sqrt((x1 - xc)^2 + (x3 - zc)^2)
   rc::FT        = 250
   θ_ref::FT     = 303
   Δθ::FT        = 0
   
   if r <= rc 
-    Δθ          = FT(1//2) 
+    Δθ          = FT(2) * cos(r*pi/rc/2)
   end
   #Perturbed state:
   θ            = θ_ref + Δθ # potential temperature
@@ -93,7 +94,7 @@ function Initialise_Rising_Bubble!(state::Vars, aux::Vars, (x1,x2,x3), t)
   state.ρ      = ρ
   state.ρu     = ρu
   state.ρe     = ρe_tot
-  state.moisture.ρq_tot = FT(0)
+  state.moisture.ρq_tot = FT(0.001)
 end
 # --------------- Driver definition ------------------ # 
 function run(mpicomm, ArrayType, 
@@ -108,7 +109,7 @@ function run(mpicomm, ArrayType,
   # -------------- Define model ---------------------------------- # 
   model = AtmosModel(FlatOrientation(),
                      NoReferenceState(),
-                     Vreman{FT}(C_smag),
+                     SmagorinskyLilly{FT}(0.9),
                      EquilMoist(), 
                      NoRadiation(),
                      Gravity(),
@@ -147,6 +148,13 @@ function run(mpicomm, ArrayType,
                                   Dates.dateformat"HH:MM:SS"),
                      energy)
     end
+  end
+
+  filterorder = 18
+  filter = ExponentialFilter(grid, 0, filterorder)
+  cbfilter = GenericCallbacks.EveryXSimulationSteps(1) do
+    Filters.apply!(Q, 1:size(Q, 2), grid, filter)
+    nothing
   end
 
   step = [0]
@@ -190,7 +198,7 @@ let
       device!(MPI.Comm_rank(mpicomm) % length(devices()))
   end
   @testset "$(@__FILE__)" for ArrayType in ArrayTypes
-    FloatType = (Float32, Float64)
+    FloatType = (Float64,)
     for FT in FloatType
       brickrange = (range(FT(xmin); length=Ne[1]+1, stop=xmax),
                     range(FT(ymin); length=Ne[2]+1, stop=ymax),
