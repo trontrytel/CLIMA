@@ -8,13 +8,20 @@ using CLIMA.DGmethods.NumericalFluxes
 using CLIMA.Diagnostics
 using CLIMA.MPIStateArrays
 using CLIMA.LowStorageRungeKuttaMethod
+using CLIMA.AdditiveRungeKuttaMethod
 using CLIMA.ODESolvers
 using CLIMA.GenericCallbacks
 using CLIMA.Atmos
+using CLIMA.GeneralizedMinimalResidualSolver
 using CLIMA.VariableTemplates
+using CLIMA.LinearSolvers
 using CLIMA.MoistThermodynamics
 using CLIMA.PlanetParameters
 using CLIMA.VTK
+
+using CLIMA.ColumnwiseLUSolver: SingleColumnLU, ManyColumnLU, banded_matrix,
+                                banded_matrix_vector_product!
+using CLIMA.DGmethods: EveryDirection, HorizontalDirection, VerticalDirection
 
 using CLIMA.Atmos: vars_state, vars_aux
 
@@ -73,7 +80,7 @@ function Initialise_DYCOMS!(state::Vars, aux::Vars, (x,y,z), t)
   qref::FT      = FT(9.0e-3)
   q_tot_sfc::FT = qref
   q_pt_sfc      = PhasePartition(q_tot_sfc)
-  Rm_sfc::FT    = gas_constant_air(q_pt_sfc) # 461.5
+  Rm_sfc::FT    = 461.5 #gas_constant_air(q_pt_sfc) # 461.5
   T_sfc::FT     = 290.4
   P_sfc::FT     = MSLP
   ρ_sfc::FT     = P_sfc / Rm_sfc / T_sfc
@@ -151,7 +158,7 @@ function Initialise_DYCOMS!(state::Vars, aux::Vars, (x,y,z), t)
 
 end
 
-function run(mpicomm, ArrayType, dim, topl, N, timeend, FT, dt, C_smag, LHF, SHF, C_drag, xmax, ymax, zmax, zsponge, out_dir)
+function run(mpicomm, ArrayType, dim, topl, N, timeend, FT, dt, C_s, LHF, SHF, C_drag, xmax, ymax, zmax, zsponge, out_dir, explicit)
   # Grid setup (topl contains brickrange information)
   grid = DiscontinuousSpectralElementGrid(topl,
                                           FloatType = FT,
@@ -175,32 +182,64 @@ function run(mpicomm, ArrayType, dim, topl, N, timeend, FT, dt, C_smag, LHF, SHF
   u_relaxation  = SVector(u_geostrophic, v_geostrophic, w_ref)
   #Sponge:
   c_sponge = 1
-
   # Model definition
   model = AtmosModel(FlatOrientation(),
-                     NoReferenceState(),
-                     SmagorinskyLilly{FT}(2*C_smag),
+                     # Hydrostatic, dry atmos as reference state
+                     HydrostaticState(IsothermalProfile(FT(290)),FT(0)),
+                     # SmagorinskyLilly
+                     SmagorinskyLilly{FT}(C_s),
+                     # EquilMoist
                      EquilMoist(),
+                     # Radiation
                      StevensRadiation{FT}(κ, α_z, z_i, ρ_i, D_subsidence, F_0, F_1),
+                     # Sources 
                      (Gravity(),
                       RayleighSponge{FT}(zmax, zsponge, c_sponge, u_relaxation),
                       GeostrophicForcing{FT}(f_coriolis, u_geostrophic, v_geostrophic)),
+                     # B.C.
                      DYCOMS_BC{FT}(C_drag, LHF, SHF),
+                     # InitialConditions
                      Initialise_DYCOMS!)
+  
   # Balancelaw description
   dg = DGModel(model,
                grid,
                Rusanov(),
                CentralNumericalFluxDiffusive(),
                CentralGradPenalty())
+  
+  linmodel = AtmosAcousticGravityLinearModel(model)
+
+  vdg = DGModel(linmodel,
+                grid,
+                Rusanov(),
+                CentralNumericalFluxDiffusive(),
+                CentralGradPenalty(),
+                auxstate=dg.auxstate,
+                direction=VerticalDirection())
+  
   #Q = init_ode_state(dg, FT(0); device=CPU())
   Q = init_ode_state(dg, FT(0))
-  lsrk = LSRK54CarpenterKennedy(dg, Q; dt = dt, t0 = 0)
   # Calculating initial condition norm
  #= eng0 = norm(Q)
   @info @sprintf """Starting
   norm(Q₀) = %.16e""" eng0
  =#
+
+  # Setup VTK output callbacks
+  out_interval = 5000
+  step = [0]
+  cbvtk = GenericCallbacks.EveryXSimulationSteps(out_interval) do (init=false)
+    fprefix = @sprintf("dycoms_%dD_mpirank%04d_step%04d", dim,
+                       MPI.Comm_rank(mpicomm), step[1])
+    outprefix = joinpath(out_dir, fprefix)
+    writevtk(outprefix, Q, dg, flattenednames(vars_state(model,FT)),
+             dg.auxstate, flattenednames(vars_aux(model,FT)))
+
+    step[1] += 1
+    nothing
+  end
+
   # Set up the information callback
   starttime = Ref(now())
   cbinfo = GenericCallbacks.EveryXWallTimeSeconds(60, mpicomm) do (s=false)
@@ -211,57 +250,53 @@ function run(mpicomm, ArrayType, dim, topl, N, timeend, FT, dt, C_smag, LHF, SHF
       @info @sprintf("""Update
                      simtime = %.16e
                      runtime = %s
-                     """, ODESolvers.gettime(lsrk),
+                     """, ODESolvers.gettime(solver),
                      Dates.format(convert(Dates.DateTime,
                                           Dates.now()-starttime[]),
                                   Dates.dateformat"HH:MM:SS"))
     end
   end
 
-
-  # Setup VTK output callbacks
-  out_interval = 5000
-  step = [0]
-  cbvtk = GenericCallbacks.EveryXSimulationSteps(out_interval) do (init=false)
-    fprefix = @sprintf("dycoms_%dD_mpirank%04d_step%04d", dim,
-                       MPI.Comm_rank(mpicomm), step[1])
-    outprefix = joinpath(out_dir, fprefix)
-    @debug "doing VTK output" outprefix
-    writevtk(outprefix, Q, dg, flattenednames(vars_state(model,FT)),
-             dg.auxstate, flattenednames(vars_aux(model,FT)))
-
-    step[1] += 1
-    nothing
-  end
-
   # Get statistics during run
   diagnostics_time_str = string(now())
   cbdiagnostics = GenericCallbacks.EveryXSimulationSteps(out_interval) do (init=false)
-    sim_time_str = string(ODESolvers.gettime(lsrk))
+    sim_time_str = string(ODESolvers.gettime(solver))
     gather_diagnostics(mpicomm, dg, Q, diagnostics_time_str, sim_time_str,
                        xmax, ymax, out_dir)
   end
 
   # Filter (Exponential via Callback)
   filterorder = 14
-  cbexpfilter = EveryXSimulationSteps(1) do
+  cbexpfilter = GenericCallbacks.EveryXSimulationSteps(1) do
     # Applies exponential filter to all prognostic variables
-    Filters.apply!(Q, 1:size(Q, 2), grid,ExponentialFilter(grid, 0, filterorder))
+    Filters.apply!(Q, 1:size(Q, 2), dg.grid,ExponentialFilter(grid, 0, filterorder))
     nothing
   end
 
   # Filter (TMAR via Callback)
-  cbtmarfilter = EveryXSimulationSteps(1) do
+  cbtmarfilter = GenericCallbacks.EveryXSimulationSteps(1) do
     # Applies positivity cutoff to ρq_tot only
-    Filters.apply!(Q, 6, disc.grid, TMARFilter())
+    Filters.apply!(Q, 6, dg.grid, TMARFilter())
     nothing
   end
 
+  if explicit == 1
+    solver = LSRK54CarpenterKennedy(dg, Q; dt = dt, t0 = 0)
+    numberofsteps = convert(Int64, cld(timeend, dt))
+    dt = timeend / numberofsteps
+  else
+    solver = ARK548L2SA2KennedyCarpenter(dg, vdg, SingleColumnLU(), Q;
+                                           dt = dt, t0 = 0,
+                                           split_nonlinear_linear=false)
+    numberofsteps = convert(Int64, cld(timeend, dt))
+    dt = timeend / numberofsteps * 20
+  end
+
   # Optional callback (filters) included
-  solve!(Q, lsrk; timeend=timeend, callbacks=(cbinfo, cbvtk, cbdiagnostics, ))
+  solve!(Q, solver; timeend=timeend, callbacks=(cbinfo, cbvtk, cbdiagnostics))
 
   # Get statistics at the end of the run
-  sim_time_str = string(ODESolvers.gettime(lsrk))
+  sim_time_str = string(ODESolvers.gettime(solver))
   gather_diagnostics(mpicomm, dg, Q, diagnostics_time_str, sim_time_str,
                      xmax, ymax, out_dir)
 
@@ -308,16 +343,14 @@ let
     # DG polynomial order
     N = 4
     # SGS Filter constants
-    C_smag = FT(0.20)
     LHF    = FT(115)
     SHF    = FT(15)
     C_drag = FT(0.0011)
+    C_s = FT(0.13)
     # User defined domain parameters
-    Δx, Δy, Δz = 50, 50, 20
-    #xmin, xmax = 0, 3200
-    #ymin, ymax = 0, 3200
-    xmin, xmax = 0, 1000
-    ymin, ymax = 0, 1000
+    Δx, Δy, Δz = 50, 50, 10
+    xmin, xmax = 0, 900
+    ymin, ymax = 0, 900
     zmin, zmax = 0, 1500
 
     grid_resolution = [Δx, Δy, Δz]
@@ -326,25 +359,22 @@ let
 
     brickrange = (grid1d(xmin, xmax, elemsize=FT(grid_resolution[1])*N),
                   grid1d(ymin, ymax, elemsize=FT(grid_resolution[2])*N),
-                  grid1d(zmin, zmax, elemsize=FT(grid_resolution[end])*N))
+                  grid1d(zmin, zmax, elemsize=FT(grid_resolution[3])*N))
     zmax = brickrange[dim][end]
 
-    zsponge = FT(1000.0)
+    zsponge = FT(1200.0)
     topl = StackedBrickTopology(mpicomm, brickrange,
                                 periodicity = (true, true, false),
                                 boundary=((0,0),(0,0),(1,2)))
-    dt = 0.01
+    dt = 0.005
     timeend = 14400
+    explicit = 1
     @info (ArrayType, dt, FT, dim)
     result = run(mpicomm, ArrayType, dim, topl,
-                 N, timeend, FT, dt, C_smag, LHF, SHF, C_drag, xmax, ymax, zmax, zsponge,
-                 out_dir)
+                 N, timeend, FT, dt, C_s, LHF, SHF, C_drag, xmax, ymax, zmax, zsponge,
+                 out_dir, explicit)
 
   end
-  @show LH_v0
-  @show R_d
-  @show MSLP
-  @show cp_d
 end
 
 #include(joinpath("..","..","..","src","Diagnostics","graph_diagnostic.jl"))

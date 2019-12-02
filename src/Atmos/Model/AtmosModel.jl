@@ -68,7 +68,7 @@ function vars_diffusive(m::AtmosModel, FT)
   @vars begin
     ρτ::SHermitianCompact{3,FT,6}
     ρd_h_tot::SVector{3,FT}
-    ρν::FT
+    ρν::SVector{3,FT}
     turbulence::vars_diffusive(m.turbulence,FT)
     moisture::vars_diffusive(m.moisture,FT)
   end
@@ -123,7 +123,6 @@ Where
 
   ###
   u += SVector(0, 0, -D*z)
-  ρu = state.ρ*u
   ###
     
   # advective terms
@@ -131,7 +130,7 @@ Where
   #flux.ρu  = ρu .* u'
     
   flux.ρ   = state.ρ*u
-  flux.ρu  = ρu .* u'
+  flux.ρu  = state.ρ*u .* u'
   flux.ρe  = u * state.ρe
 
   # pressure terms
@@ -156,7 +155,7 @@ end
   u = ρinv * state.ρu
 
   ###
-  u += SVector(0, 0, -D*z)
+#  u += SVector(0, 0, -D*z)
   ###
     
   # diffusive
@@ -200,7 +199,7 @@ function diffusive!(m::AtmosModel, diffusive::Vars, ∇transform::Grad, state::V
 
   ∇h_tot = ∇transform.h_tot
   # turbulent Prandtl number
-  diag_ρν = ρν isa Real ? ρν : diag(ρν) # either a scalar or matrix
+  diag_ρν = ρν #isa Real ? ρν : diag(ρν) # either a scalar or matrix
   # Diffusivity ρD_t = ρν/Prandtl_turb
   ρD_t = diag_ρν * inv_Pr_turb
   # diffusive flux of total energy
