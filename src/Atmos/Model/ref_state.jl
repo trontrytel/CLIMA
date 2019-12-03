@@ -135,7 +135,7 @@ function atmos_init_aux!(m::DYCOMSRefState, atmos::AtmosModel, aux::Vars, geom::
   q_vap_sat = q_vap_saturation(T, ρ)
   q_pt = PhasePartition(aux.ref_state.ρq_tot)
   aux.ref_state.ρe = ρ * internal_energy(T, q_pt)
-  aux.ref_state.θ_v = virtual_pottemp(T,p,q_pt)
+  aux.ref_state.θ_v = virtual_pottemp(T,ρ,q_pt)
 end
 
 """
