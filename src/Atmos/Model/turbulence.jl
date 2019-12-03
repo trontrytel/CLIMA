@@ -98,7 +98,8 @@ function atmos_init_aux!(::SmagorinskyLilly, ::AtmosModel, aux::Vars, geom::Loca
 end
 
 function gradvariables!(m::SmagorinskyLilly, transform::Vars, state::Vars, aux::Vars, t::Real)
-  transform.turbulence.θ_v = aux.moisture.θ_v
+  #transform.turbulence.θ_v = aux.moisture.θ_v
+  transform.turbulence.θ_v = aux.ref_state.θ_v
 end
 
 """

@@ -1,6 +1,6 @@
 ### Reference state
 using DocStringExtensions
-export NoReferenceState, HydrostaticState, IsothermalProfile, LinearTemperatureProfile
+export NoReferenceState, HydrostaticState, IsothermalProfile, LinearTemperatureProfile, DYCOMSRefState
 
 """
     ReferenceState
@@ -55,6 +55,90 @@ function atmos_init_aux!(m::HydrostaticState{P,F}, atmos::AtmosModel, aux::Vars,
 end
 
 
+struct DYCOMSRefState <: ReferenceState
+end
+
+vars_aux(m::DYCOMSRefState, FT) = @vars(ρ::FT, p::FT, T::FT, ρe::FT, ρq_tot::FT, θ_v::FT)
+
+function atmos_init_aux!(m::DYCOMSRefState, atmos::AtmosModel, aux::Vars, geom::LocalGeometry) 
+  FT            = eltype(state)
+  xvert::FT     = z
+  Rd::FT        = R_d
+  Rv::FT        = R_v
+  Rm::FT        = Rd
+  ϵdv::FT       = Rv/Rd
+  cpd::FT       = cp_d
+
+  # These constants are those used by Stevens et al. (2005)
+  qref::FT      = FT(9.0e-3)
+  q_tot_sfc::FT = qref
+  q_pt_sfc      = PhasePartition(q_tot_sfc)
+  Rm_sfc::FT    = 461.5 #gas_constant_air(q_pt_sfc) # 461.5
+  T_sfc::FT     = 290.4
+  P_sfc::FT     = MSLP
+  ρ_sfc::FT     = P_sfc / Rm_sfc / T_sfc
+  # Specify moisture profiles
+  q_liq::FT      = 0
+  q_ice::FT      = 0
+  q_c::FT        = 0
+  zb::FT         = 600         # initial cloud bottom
+  zi::FT         = 840         # initial cloud top
+  ziplus::FT     = 875
+  dz_cloud       = zi - zb
+  θ_liq::FT      = 289
+  if xvert <= zi
+    θ_liq = FT(289.0)
+    q_tot = qref
+  else
+    θ_liq = FT(297.0) + (xvert - zi)^(FT(1/3))
+    q_tot = FT(1.5e-3)
+  end
+  q_c = q_liq + q_ice
+    
+  # Calculate PhasePartition object for vertical domain extent
+  q_pt  = PhasePartition(q_tot, q_liq, q_ice)
+  Rm    = gas_constant_air(q_pt)
+
+  # Pressure
+  H     = Rm_sfc * T_sfc / grav;
+  p     = P_sfc * exp(-xvert/H);
+  # Density, Temperature
+  # TODO: temporary fix
+  TS    = LiquidIcePotTempSHumEquil_given_pressure(θ_liq, q_tot, p)
+  ρ     = air_density(TS)
+  T     = air_temperature(TS)
+  q_pt  = PhasePartition_equil(T, ρ, q_tot)
+
+  # Assign State Variables
+  u1, u2 = FT(6), FT(7)
+  v1, v2 = FT(-4.25), FT(-5.5)
+  w = FT(0)
+  if (xvert <= zi)
+      u, v = u1, v1
+  elseif (xvert >= ziplus)
+      u, v = u2, v2
+  else
+      m = (ziplus - zi)/(u2 - u1)
+      u = (xvert - zi)/m + u1
+
+      m = (ziplus - zi)/(v2 - v1)
+      v = (xvert - zi)/m + v1
+  end
+  e_kin       = FT(1/2) * (u^2 + v^2 + w^2)
+  e_pot       = grav * xvert
+  E           = ρ * total_energy(e_kin, e_pot, T, q_pt)
+  state.ρ     = ρ
+  state.ρu    = SVector{3,FT}(0,0,0)
+  aux.ref_state.ρe = E
+  aux.ref_state.ρq_tot = ρ * q_tot
+  aux.ref_state.T = T
+  aux.ref_state.p = p
+  aux.ref_state.ρ = p/(R_d*T)
+  q_vap_sat = q_vap_saturation(T, ρ)
+  q_pt = PhasePartition(ρq_tot)
+  aux.ref_state.ρe = ρ * internal_energy(T, q_pt)
+  aux.ref_state.θ_v = virtual_pottemp(T,p,q_pt)
+end
 
 """
     TemperatureProfile
