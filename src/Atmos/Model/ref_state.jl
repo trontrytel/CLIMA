@@ -61,8 +61,8 @@ end
 vars_aux(m::DYCOMSRefState, FT) = @vars(ρ::FT, p::FT, T::FT, ρe::FT, ρq_tot::FT, θ_v::FT)
 
 function atmos_init_aux!(m::DYCOMSRefState, atmos::AtmosModel, aux::Vars, geom::LocalGeometry) 
-  FT            = eltype(state)
-  xvert::FT     = z
+  FT            = eltype(aux)
+  xvert::FT     = aux.coord[3]
   Rd::FT        = R_d
   Rv::FT        = R_v
   Rm::FT        = Rd
@@ -127,15 +127,13 @@ function atmos_init_aux!(m::DYCOMSRefState, atmos::AtmosModel, aux::Vars, geom::
   e_kin       = FT(1/2) * (u^2 + v^2 + w^2)
   e_pot       = grav * xvert
   E           = ρ * total_energy(e_kin, e_pot, T, q_pt)
-  state.ρ     = ρ
-  state.ρu    = SVector{3,FT}(0,0,0)
   aux.ref_state.ρe = E
   aux.ref_state.ρq_tot = ρ * q_tot
   aux.ref_state.T = T
   aux.ref_state.p = p
   aux.ref_state.ρ = p/(R_d*T)
   q_vap_sat = q_vap_saturation(T, ρ)
-  q_pt = PhasePartition(ρq_tot)
+  q_pt = PhasePartition(aux.ref_state.ρq_tot)
   aux.ref_state.ρe = ρ * internal_energy(T, q_pt)
   aux.ref_state.θ_v = virtual_pottemp(T,p,q_pt)
 end
