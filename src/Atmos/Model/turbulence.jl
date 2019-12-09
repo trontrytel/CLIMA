@@ -1,4 +1,11 @@
 #### Turbulence closures
+# Contains a set of functions to compute eddy-viscosities and diffusivities given the 
+# rate-of-strain tensor. Models currently included are:
+# 1) Smagorinsky-Lilly (given a model constant coefficient)
+# 2) Vreman (Low-dissipation, velocity-gradient based method, given a model constant coefficient)
+# 3) Anisotropic-Minimum-Dissipation (Currently applies tracer-diffusivity via critical Richardson correction)
+# This file provides functionality to compute the eddy-viscosities and diffusivities 
+#
 using DocStringExtensions
 using CLIMA.PlanetParameters
 using CLIMA.SubgridScaleParameters
@@ -35,7 +42,7 @@ function compute_principal_invariants(X::StaticArray{Tuple{3,3}})
   first = tr(X)
   second = 1/2 *((tr(X))^2 - tr(X .^ 2))
   third = det(X)
-  return PrincipalInvariants{eltype(X)}(first,second,third)
+  return PrincipalInvariants{eltype(X)}(first, second, third)
 end
 
 """
@@ -105,8 +112,8 @@ end
 
 Compute the buoyancy adjustment coefficient for stratified flows 
 given the strain rate tensor inner product |S| ≡ SijSij ≡ normSij, 
-local virtual potential temperature θᵥ and the vertical potential 
-temperature gradient dθvdz. 
+local virtual potential temperature θ_v and the vertical potential 
+temperature gradient (∂θ_v/∂z). 
 
 Brunt-Vaisala frequency N² defined as in equation (1b) in 
   Durran, D.R. and J.B. Klemp, 1982: 
@@ -115,12 +122,12 @@ Brunt-Vaisala frequency N² defined as in equation (1b) in
   https://doi.org/10.1175/1520-0469(1982)039<2152:OTEOMO>2.0.CO;2 
 
 Ri = N² / (2*normSij)
-Ri = gravity / θᵥ * ∂θᵥ∂z / 2 |S_{ij}|
+Ri = (gravity / θ_v * (∂θ_v/∂z)) / 2 |S_{ij}|
 
-§1.3.2 in CliMA documentation. 
+§3.3.2 in CliMA documentation. 
 
 article{doi:10.1111/j.2153-3490.1962.tb00128.x,
-author = {LILLY, D. K.},
+author = {Lilly, D. K.},
 title = {On the numerical simulation of buoyant convection},
 journal = {Tellus},
 volume = {14},
@@ -133,6 +140,7 @@ year = {1962}
 }
 """
 function squared_buoyancy_correction(normS, ∇transform::Grad, aux::Vars)
+  # Here, (∇θ_v)⋅(∇Φ) where (Φ = gz) allows computation of Brunt-Vaisala frequency
   ∂θ∂Φ = dot(∇transform.turbulence.θ_v, aux.orientation.∇Φ)
   N² = ∂θ∂Φ / aux.moisture.θ_v
   Richardson = N² / (normS^2 + eps(normS))
