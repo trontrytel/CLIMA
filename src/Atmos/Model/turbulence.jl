@@ -289,6 +289,7 @@ struct AnisoMinDiss{FT} <: TurbulenceClosure
 end
 vars_aux(::AnisoMinDiss,T) = @vars(Δ::T,ρν::T,BR::T,Freq::T)
 vars_gradient(::AnisoMinDiss,T) = @vars(θ_v::T)
+vars_diffusive(::AnisoMinDiss,FT) = @vars(BR::FT)
 function atmos_init_aux!(::AnisoMinDiss, ::AtmosModel, aux::Vars, geom::LocalGeometry)
   aux.turbulence.Δ = lengthscale(geom)
   aux.turbulence.ρν = 0
