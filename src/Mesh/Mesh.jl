@@ -1,5 +1,4 @@
 module Mesh
-include("Basis1d.jl")
 include("Tens.jl")
 include("BrickMesh.jl")
 include("Topologies.jl")

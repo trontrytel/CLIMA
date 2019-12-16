@@ -53,7 +53,7 @@ function run()
 #  Ne        = (20,2,20)
   Ne        = (4,2,4)
 
-  polynomialorder = 8 #4
+  polynomialorder = 4 #8 #4
   #-------------------------
   _x, _y, _z = 12, 13, 14
   _ρ, _ρu, _ρv, _ρw = 1, 2, 3, 4

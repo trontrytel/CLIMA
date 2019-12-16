@@ -1,10 +1,11 @@
 module Interpolation
 
 using MPI
+import GaussQuadrature
 using CLIMA.Mesh.Topologies
 using CLIMA.Mesh.Grids
 using CLIMA.Mesh.Geometry
-using CLIMA.Mesh.Basis1d
+using CLIMA.Mesh.Elements
 using CLIMA.Mesh.Tens
 using StaticArrays
 
@@ -118,22 +119,19 @@ end # struct Interpolation_Brick
 #--------------------------------------------------------
 function interpolate_brick!(intrp_brck::Interpolation_Brick, sv::AbstractArray{FT}, st_no::T, poly_order::T) where {T <: Integer, FT <: AbstractFloat}
 
-  b1d = B1d(poly_order,FT)
-  α, β = Integer(0), Integer(0) # for Legendre polynomials
-  #-----for each element elno 
- leg = zeros( FT, (poly_order+1)*(poly_order+1)*(poly_order+1))
+  qm1 = poly_order + 1
+  m1_r, m1_w = GaussQuadrature.legendre(FT,qm1,GaussQuadrature.both)
 
+  #-----for each element elno 
   for el in 1:intrp_brck.Nel
 
     lag = @view sv[:,st_no,el]
 
-    tenspxv_hex!(b1d.trans, b1d.trans, b1d.trans, false, lag, leg) # Extracting coefficients for Legendre basis
+    g_phir = Elements.interpolationmatrix(m1_r, intrp_brck.ξ1[el])
+    g_phis = Elements.interpolationmatrix(m1_r, intrp_brck.ξ2[el])
+    g_phit = Elements.interpolationmatrix(m1_r, intrp_brck.ξ3[el])
 
-    g_phir = jacobip(α,β, poly_order, intrp_brck.ξ1[el], dflag=false)
-    g_phis = jacobip(α,β, poly_order, intrp_brck.ξ2[el], dflag=false)
-    g_phit = jacobip(α,β, poly_order, intrp_brck.ξ3[el], dflag=false)
-
-    tenspxv_hex!(g_phir, g_phis, g_phit, false, leg, intrp_brck.V[el]) 
+    tenspxv_hex!(g_phir, g_phis, g_phit, false, lag, intrp_brck.V[el]) 
   #--------------------
   end
 
