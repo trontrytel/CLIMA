@@ -9,7 +9,7 @@ using CLIMA.Mesh.Elements
 using CLIMA.Mesh.Tens
 using StaticArrays
 
-export Interpolation_Brick, interpolate_brick!
+export Interpolation_Brick, interpolate_brick!, Interpolation_Cubed_Sphere
 
 #--------------------------------------------------------
 
@@ -136,5 +136,126 @@ function interpolate_brick!(intrp_brck::Interpolation_Brick, sv::AbstractArray{F
   end
 
 end
+#--------------------------------------------------------
+#--------------------------------------------------------
+
+struct Interpolation_Cubed_Sphere{T <: Integer, FT <: AbstractFloat}
+
+    El::UnitRange{Int64}
+
+    Nel::T
+
+    lat_min::FT;  long_min::FT;  rad_min::FT; # domain bounds, min
+    lat_max::FT;  long_max::FT;  rad_max::FT; # domain bounds, max
+    lat_res::FT;  long_res::FT;  rad_res::FT; # respective resolutions for the uniform grid
+
+    lat_grd::Array{FT}                        # lat grid locations
+    long_grd::Array{FT}                       # long grid locations
+    rad_grd::Array{FT}                        # rad grid locations
+
+    n_lat::T; n_long::T; n_rad::T;            # # of lat, long & rad grid locations
+
+    el_grd                          # element containing the grid point
+
+
+  function Interpolation_Cubed_Sphere(grid::DiscontinuousSpectralElementGrid, vert_range::AbstractArray{FT}, lat_res::FT, long_res::FT, rad_res::FT) where {FT <: AbstractFloat}
+    T = Integer
+
+    toler1 = eps(FT) * vert_range[1] * 2.0 # tolerance for unwarp function
+    toler2 = eps(FT) * 4.0                 # tolerance 
+
+    lat_min,   lat_max = FT(0.0), FT(π)                 # inclination/zeinth angle range
+    long_min, long_max = FT(0.0), FT(2*π)  			    # azimuthal angle range
+    rad_min,   rad_max = vert_range[1], vert_range[end] # radius range
+
+    El = grid.topology.realelems # Element (numbers) on the local processor
+    Nel = length(El)
+
+    Nel_global = length(grid.topology.elems)
+    nvert = length(vert_range) - 1              # # of elements in vertical direction
+    nhor  = T( sqrt( Nel_global / nvert / 6) )  # # of elements in horizontal direction
+    nblck = nhor * nhor * nvert
+    Δh = 2.0 / nhor                             # horizontal grid spacing in unwarped grid
+
+    lat_grd, long_grd, rad_grd = range(lat_min, lat_max, step=lat_res), range(long_min, long_max, step=long_res), range(rad_min, rad_max, step=rad_res) 
+
+    n_lat, n_long, n_rad = T(length(lat_grd)), T(length(long_grd)), T(length(rad_grd))
+
+    el_grd = Array{T}(undef, n_rad, n_lat, n_long) # element containing the lat/long/rad grid point 
+    #---------------------------------------------- 
+
+    flip_ord = invperm(grid.topology.origsendorder) # to account for reordering of elements after the partitioning process 
+
+    reorder = zeros(T, 6*nvert*nhor*nhor)
+
+    for i in 1:length(flip_ord), j in 1:nvert
+        reorder[j + (i-1)*nvert] = (flip_ord[i] - 1)*nvert + j
+    end
+
+    temp = invperm(grid.topology.origsendorder) 
+
+    for k in 1:n_long
+      for j in 1:n_lat
+        for i in 1:n_rad 
+          x1_grd_ijk = rad_grd[i] * sin(lat_grd[j]) * cos(long_grd[k]) # inclination -> latitude; azimuthal -> longitude.
+          x2_grd_ijk = rad_grd[i] * sin(lat_grd[j]) * sin(long_grd[k]) # inclination -> latitude; azimuthal -> longitude.
+          x3_grd_ijk = rad_grd[i] * cos(lat_grd[j])   
+
+          x1_uw_grd_ijk, x2_uw_grd_ijk, x3_uw_grd_ijk = Topologies.cubedshellunwarp(x1_grd_ijk, x2_grd_ijk, x3_grd_ijk) # unwarping from sphere to cubed shell
+          rad = FT(max( abs(x1_uw_grd_ijk), abs(x2_uw_grd_ijk), abs(x3_uw_grd_ijk) ))
+          #--------------------------------
+          x1_uw_grd_ijk /= rad # unwrapping cubed shell on to a 2D grid (in 3D space, -1 to 1 cube)
+          x2_uw_grd_ijk /= rad
+          x3_uw_grd_ijk /= rad
+          #--------------------------------
+          if rad ≤ vert_range[1]       # accounting for minor rounding errors from unwarp function at boundaries 
+            vert_range[1] - rad < toler1 ? l_nrm = 1 :  error("fatal error, rad lower than inner radius")
+          elseif rad ≥ vert_range[end] # accounting for minor rounding errors from unwarp function at boundaries 
+            rad - vert_range[end] < toler1 ? l_nrm = nvert : error("fatal error, rad greater than outer radius")
+          else                         # normal scenario
+            l_nrm = findfirst( X -> X .- rad .> 0.0, vert_range ) - 1 # identify stack bin 
+          end
+          #--------------------------------
+          if     abs(x1_uw_grd_ijk + 1) < toler2 # face 1 (x1 == -1 plane)
+		    l2 = min(div(x2_uw_grd_ijk + 1, Δh) + 1, nhor)
+		    l3 = min(div(x3_uw_grd_ijk + 1, Δh) + 1, nhor)
+            el_grd[i,j,k] = reorder[T(l_nrm + (nhor-l2)*nvert + (l3-1)*nvert*nhor)] 
+          elseif abs(x2_uw_grd_ijk + 1) < toler2 # face 2 (x2 == -1 plane)
+		    l1 = min(div(x1_uw_grd_ijk + 1, Δh) + 1, nhor)
+		    l3 = min(div(x3_uw_grd_ijk + 1, Δh) + 1, nhor)
+            el_grd[i,j,k] = reorder[T(l_nrm + (l1-1)*nvert + (l3-1)*nvert*nhor + nblck*1)]
+          elseif abs(x1_uw_grd_ijk - 1) < toler2 # face 3 (x1 == +1 plane)
+		    l2 = min(div(x2_uw_grd_ijk + 1, Δh) + 1, nhor)
+		    l3 = min(div(x3_uw_grd_ijk + 1, Δh) + 1, nhor)
+            el_grd[i,j,k] = reorder[T(l_nrm + (l2-1)*nvert + (l3-1)*nvert*nhor + nblck*2 )]
+          elseif abs(x3_uw_grd_ijk - 1) < toler2 # face 4 (x3 == +1 plane)
+  		    l1 = min(div(x1_uw_grd_ijk + 1, Δh) + 1, nhor)
+		    l2 = min(div(x2_uw_grd_ijk + 1, Δh) + 1, nhor)
+            el_grd[i,j,k] = reorder[T(l_nrm + (l1-1)*nvert + (l2-1)*nvert*nhor + nblck*3)]
+          elseif abs(x2_uw_grd_ijk - 1) < toler2 # face 5 (x2 == +1 plane)
+	        l1 = min(div(x1_uw_grd_ijk + 1, Δh) + 1, nhor)
+		    l3 = min(div(x3_uw_grd_ijk + 1, Δh) + 1, nhor)
+            el_grd[i,j,k] = reorder[T(l_nrm + (l1-1)*nvert + (nhor-l3)*nvert*nhor + nblck*4 )]
+          elseif abs(x3_uw_grd_ijk + 1) < toler2 # face 6 (x3 == -1 plane)
+		    l1 = min(div(x1_uw_grd_ijk + 1, Δh) + 1, nhor)
+		    l2 = min(div(x2_uw_grd_ijk + 1, Δh) + 1, nhor)
+            el_grd[i,j,k] = reorder[T(l_nrm + (l1-1)*nvert + (nhor-l2)*nvert*nhor + nblck*5)]
+          else
+            error("error: unwrapped grid does on lie on any of the 6 faces")
+          end
+          #--------------------------------
+      end
+    end
+  end
+ 
+
+  return new{T, FT}(El, Nel, lat_min, long_min, rad_min, lat_max, long_max, rad_max, lat_res, long_res, rad_res, 
+                    lat_grd, long_grd, rad_grd, n_lat, n_long, n_rad, el_grd)
+    #-----------------------------------------------------------------------------------
+
+end # Inner constructor function Interpolation_Cubed_Sphere
+
+
+end # structure Interpolation_Cubed_Sphere
 #--------------------------------------------------------
 end # module interploation

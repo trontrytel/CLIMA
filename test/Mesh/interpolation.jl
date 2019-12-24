@@ -6,6 +6,8 @@ using CLIMA.Mesh.Grids
 using CLIMA.Mesh.Geometry
 using CLIMA.Mesh.Interpolation
 using StaticArrays
+
+#using Plots
 #------------------------------------------------
 using CLIMA.DGmethods
 using CLIMA.DGmethods.NumericalFluxes
@@ -26,16 +28,19 @@ using CLIMA.VTK
 using CLIMA.Atmos: vars_state, vars_aux
 
 using Random
+using Statistics
 const seed = MersenneTwister(0)
 
 const ArrayType = CLIMA.array_type()
+
+
 #------------------------------------------------
 if !@isdefined integration_testing
   const integration_testing =
     parse(Bool, lowercase(get(ENV,"JULIA_CLIMA_INTEGRATION_TESTING","false")))
 end
 #------------------------------------------------
-function run()
+function run_brick_interpolation_test()
   MPI.Initialized() || MPI.Init()
 
 #@testset "LocalGeometry" begin
@@ -55,7 +60,7 @@ function run()
 
   polynomialorder = 4 #8 #4
   #-------------------------
-  _x, _y, _z = 13, 14, 15
+  _x, _y, _z = CLIMA.Mesh.Grids.vgeoid.x1id, CLIMA.Mesh.Grids.vgeoid.x2id, CLIMA.Mesh.Grids.vgeoid.x3id
   _ρ, _ρu, _ρv, _ρw = 1, 2, 3, 4
   #-------------------------
 
@@ -77,7 +82,7 @@ function run()
                      NoRadiation(),
                      (Gravity()),
 					 NoFluxBC(),
-                     Initialise_Test!)
+                     Initialize_Brick_Interpolation_Test!)
 
   dg = DGModel(model,
                grid,
@@ -122,17 +127,204 @@ function run()
   display(l_infinity_domain)
   println("==============================================")
   #----------------
-end #function run
+end #function run_brick_interpolation_test
 
 #-----taken from Test example
-function Initialise_Test!(state::Vars, aux::Vars, (x,y,z), t)
+function Initialize_Brick_Interpolation_Test!(state::Vars, aux::Vars, (x,y,z), t)
   FT         = eltype(state)
 	
-	# Dummy variables for initial condition function 
+  # Dummy variables for initial condition function 
   state.ρ     = FT(0) 
   state.ρu    = SVector{3,FT}(0,0,0)
   state.ρe    = FT(0)
   state.moisture.ρq_tot = FT(0)
 end
 #------------------------------------------------
-run()
+# Cubed sphere, lat/long interpolation test
+#----------------------------------------------------------------------------
+#=function run_cubed_sphere()
+
+  CLIMA.init()
+
+  FT = Float64
+  mpicomm = MPI.COMM_WORLD
+
+  ll = uppercase(get(ENV, "JULIA_LOG_LEVEL", "INFO"))
+  loglevel = Dict("DEBUG" => Logging.Debug,
+                  "WARN"  => Logging.Warn,
+                  "ERROR" => Logging.Error,
+                  "INFO"  => Logging.Info)[ll]
+
+  logger_stream = MPI.Comm_rank(mpicomm) == 0 ? stderr : devnull
+  global_logger(ConsoleLogger(logger_stream, loglevel))
+
+  polynomialorder = 5
+  numelem_horz = 6
+  numelem_vert = 8
+
+  #-------------------------
+  _x, _y, _z = 13, 14, 15
+  _ρ, _ρu, _ρv, _ρw = 1, 2, 3, 4
+  #-------------------------
+
+  #----------------------------------------------------------
+  setup = TestSphereSetup{FT}()
+
+  vert_range = grid1d(FT(planet_radius), FT(planet_radius + setup.domain_height), nelem = numelem_vert)
+  topology = StackedCubedSphereTopology(mpicomm, numelem_horz, vert_range)
+
+  grid = DiscontinuousSpectralElementGrid(topology,
+                                          FloatType = FT,
+                                          DeviceArray = ArrayType,
+                                          polynomialorder = polynomialorder,
+                                          meshwarp = CLIMA.Mesh.Topologies.cubedshellwarp)
+
+  model = AtmosModel(SphericalOrientation(),
+                     NoReferenceState(),
+                     ConstantViscosityWithDivergence(FT(0)),
+                     DryModel(),
+                     NoRadiation(),
+                     nothing, 
+                     NoFluxBC(),
+                     setup)
+
+  dg = DGModel(model, grid, Rusanov(),
+               CentralNumericalFluxDiffusive(), CentralGradPenalty())
+
+  Q = init_ode_state(dg, FT(0))
+
+  #------------------------------
+  x1 = @view grid.vgeo[:,_x,:]
+  x2 = @view grid.vgeo[:,_y,:]
+  x3 = @view grid.vgeo[:,_z,:]
+  #------------------------------
+
+
+end =#
+#----------------------------------------------------------------------------
+#----------------------------------------------------------------------------
+Base.@kwdef struct TestSphereSetup{FT}
+  p_ground::FT = MSLP
+  T_initial::FT = 255
+  domain_height::FT = 30e3
+end
+
+#----------------------------------------------------------------------------
+function (setup::TestSphereSetup)(state, aux, coords, t) 
+  # callable to set initial conditions
+  FT = eltype(state)
+
+  r = norm(coords, 2)
+  h = r - FT(planet_radius)
+
+  scale_height = R_d * setup.T_initial / grav
+  p = setup.p_ground * exp(-h / scale_height)
+
+  state.ρ = air_density(setup.T_initial, p)
+  state.ρu = SVector{3, FT}(0, 0, 0)
+  state.ρe = state.ρ * (internal_energy(setup.T_initial) + aux.orientation.Φ)
+  nothing
+end
+#----------------------------------------------------------------------------
+
+
+#run_brick_interpolation_test()
+#run_cubed_sphere()
+#------------------------------------------------
+
+#---------contents of function run_cubed_sphere-------------------------------------------------------------------
+  CLIMA.init()
+
+  FT = Float64
+  mpicomm = MPI.COMM_WORLD
+
+  ll = uppercase(get(ENV, "JULIA_LOG_LEVEL", "INFO"))
+  loglevel = Dict("DEBUG" => Logging.Debug,
+                  "WARN"  => Logging.Warn,
+                  "ERROR" => Logging.Error,
+                  "INFO"  => Logging.Info)[ll]
+
+  logger_stream = MPI.Comm_rank(mpicomm) == 0 ? stderr : devnull
+  global_logger(ConsoleLogger(logger_stream, loglevel))
+
+  polynomialorder = 4#1#4 #5
+  numelem_horz = 3#4 #6
+  numelem_vert = 4#1 #1 #1#6 #8
+
+  #-------------------------
+  _x, _y, _z = CLIMA.Mesh.Grids.vgeoid.x1id, CLIMA.Mesh.Grids.vgeoid.x2id, CLIMA.Mesh.Grids.vgeoid.x3id
+  _ρ, _ρu, _ρv, _ρw = 1, 2, 3, 4
+  #-------------------------
+  lat_res  = 5 * π / 180.0 # 5 degree resolution
+  long_res = 5 * π / 180.0 # 5 degree resolution
+  r_res    = 1000.00    # 1000 m vertical resolution
+
+  #----------------------------------------------------------
+  setup = TestSphereSetup{FT}()
+
+#  vert_range = grid1d(FT(planet_radius), FT(planet_radius + setup.domain_height), nelem = numelem_vert)
+  vert_range = grid1d(FT(1.0), FT(2.0), nelem = numelem_vert)
+  topology = StackedCubedSphereTopology(mpicomm, numelem_horz, vert_range)
+
+  grid = DiscontinuousSpectralElementGrid(topology,
+                                          FloatType = FT,
+                                          DeviceArray = ArrayType,
+                                          polynomialorder = polynomialorder,
+                                          meshwarp = CLIMA.Mesh.Topologies.cubedshellwarp)
+
+  model = AtmosModel(SphericalOrientation(),
+                     NoReferenceState(),
+                     ConstantViscosityWithDivergence(FT(0)),
+                     DryModel(),
+                     NoRadiation(),
+                     nothing, 
+                     NoFluxBC(),
+                     setup)
+
+  dg = DGModel(model, grid, Rusanov(),
+               CentralNumericalFluxDiffusive(), CentralGradPenalty())
+
+  Q = init_ode_state(dg, FT(0))
+  #------------------------------
+  x1 = @view grid.vgeo[:,_x,:]
+  x2 = @view grid.vgeo[:,_y,:]
+  x3 = @view grid.vgeo[:,_z,:]
+  #------------------------------
+  x1_un = @view grid.topology.elemtocoord[1,:,:] # elemtocoord[x/y/z,,vert#, elem#] 
+  x2_un = @view grid.topology.elemtocoord[2,:,:] 
+  x3_un = @view grid.topology.elemtocoord[3,:,:]
+
+
+  intrp_cs = Interpolation_Cubed_Sphere(grid, collect(vert_range), lat_res, long_res, r_res)
+
+#  scatter( x1_un[:], x2_un[:], x3_un[:], legend = false)
+
+#  scatter( intrp_cs.x1_uw_grd[:], intrp_cs.x2_uw_grd[:], intrp_cs.x3_uw_grd[:], xlabel = "X", ylabel = "Y", zlabel = "Z", legend = false)
+
+#  xx = intrp_cs.x1_uw_grd[:]
+#  yy = intrp_cs.x2_uw_grd[:]
+#  zz = intrp_cs.x3_uw_grd[:]
+
+#toler = 1e-12
+#loc = (abs.(xx .- 1) .< toler) .* (abs.(xx .+ 1) .> toler) .* 
+#      (abs.(yy .- 1) .< toler) .* (abs.(yy .+ 1) .> toler) .* 
+#      (abs.(zz .- 1) .< toler) .* (abs.(zz .+ 1) .> toler);
+
+#=  for k in 1:numelem_horz
+    println("=======k = ",k,"====================================")
+    for j in 1:numelem_vert
+    i = j + (k-1)*numelem_vert
+    println("xm = ", sum(x1_un[:,i])/length(x1_un[:,i]), "; ym = ", sum(x2_un[:,i])/length(x2_un[:,i]),  "; zm = ", sum(x3_un[:,i])/length(x3_un[:,i] ) )
+    end
+    println("===========================================")
+  end
+=#
+#  for i in 1:length(grid.topology.realelems)
+#    println(i,"). xm = ",mean(x1[:,i]), "; ym = ", mean(x2[:,i]), "; zm = ",  mean(x3[:,i]))
+#    if mod(i, length(grid.topology.realelems)/6  ) == 0
+#        println("----------------------------------------------------")
+#    end
+    
+#  end
+#----------------------------------------------------------------------------
+
