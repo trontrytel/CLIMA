@@ -7,9 +7,10 @@ using CLIMA.Mesh.Grids
 using CLIMA.Mesh.Geometry
 using CLIMA.Mesh.Elements
 using CLIMA.Mesh.Tens
+using LinearAlgebra
 using StaticArrays
 
-export Interpolation_Brick, interpolate_brick!, Interpolation_Cubed_Sphere
+export Interpolation_Brick, interpolate_brick!, Interpolation_Cubed_Sphere, invert_trilear_mapping_hex
 
 #--------------------------------------------------------
 
@@ -182,6 +183,7 @@ struct Interpolation_Cubed_Sphere{T <: Integer, FT <: AbstractFloat}
     n_lat, n_long, n_rad = T(length(lat_grd)), T(length(long_grd)), T(length(rad_grd))
 
     el_grd = Array{T}(undef, n_rad, n_lat, n_long) # element containing the lat/long/rad grid point 
+    uw_grd = zeros(FT, 3, 1)
     #---------------------------------------------- 
 
     flip_ord = invperm(grid.topology.origsendorder) # to account for reordering of elements after the partitioning process 
@@ -197,16 +199,16 @@ struct Interpolation_Cubed_Sphere{T <: Integer, FT <: AbstractFloat}
     for k in 1:n_long
       for j in 1:n_lat
         for i in 1:n_rad 
-          x1_grd_ijk = rad_grd[i] * sin(lat_grd[j]) * cos(long_grd[k]) # inclination -> latitude; azimuthal -> longitude.
-          x2_grd_ijk = rad_grd[i] * sin(lat_grd[j]) * sin(long_grd[k]) # inclination -> latitude; azimuthal -> longitude.
-          x3_grd_ijk = rad_grd[i] * cos(lat_grd[j])   
+          x1_grd = rad_grd[i] * sin(lat_grd[j]) * cos(long_grd[k]) # inclination -> latitude; azimuthal -> longitude.
+          x2_grd = rad_grd[i] * sin(lat_grd[j]) * sin(long_grd[k]) # inclination -> latitude; azimuthal -> longitude.
+          x3_grd = rad_grd[i] * cos(lat_grd[j])   
 
-          x1_uw_grd_ijk, x2_uw_grd_ijk, x3_uw_grd_ijk = Topologies.cubedshellunwarp(x1_grd_ijk, x2_grd_ijk, x3_grd_ijk) # unwarping from sphere to cubed shell
-          rad = FT(max( abs(x1_uw_grd_ijk), abs(x2_uw_grd_ijk), abs(x3_uw_grd_ijk) ))
+          uw_grd[1], uw_grd[2], uw_grd[3] = Topologies.cubedshellunwarp(x1_grd, x2_grd, x3_grd) # unwarping from sphere to cubed shell
+          rad = FT(maximum(abs.(uw_grd)))
           #--------------------------------
-          x1_uw_grd_ijk /= rad # unwrapping cubed shell on to a 2D grid (in 3D space, -1 to 1 cube)
-          x2_uw_grd_ijk /= rad
-          x3_uw_grd_ijk /= rad
+          x1_uw2_grd = uw_grd[1] / rad # unwrapping cubed shell on to a 2D grid (in 3D space, -1 to 1 cube)
+          x2_uw2_grd = uw_grd[2] / rad
+          x3_uw2_grd = uw_grd[3] / rad
           #--------------------------------
           if rad ≤ vert_range[1]       # accounting for minor rounding errors from unwarp function at boundaries 
             vert_range[1] - rad < toler1 ? l_nrm = 1 :  error("fatal error, rad lower than inner radius")
@@ -216,33 +218,45 @@ struct Interpolation_Cubed_Sphere{T <: Integer, FT <: AbstractFloat}
             l_nrm = findfirst( X -> X .- rad .> 0.0, vert_range ) - 1 # identify stack bin 
           end
           #--------------------------------
-          if     abs(x1_uw_grd_ijk + 1) < toler2 # face 1 (x1 == -1 plane)
-		    l2 = min(div(x2_uw_grd_ijk + 1, Δh) + 1, nhor)
-		    l3 = min(div(x3_uw_grd_ijk + 1, Δh) + 1, nhor)
+          if     abs(x1_uw2_grd + 1) < toler2 # face 1 (x1 == -1 plane)
+		    l2 = min(div(x2_uw2_grd + 1, Δh) + 1, nhor)
+		    l3 = min(div(x3_uw2_grd + 1, Δh) + 1, nhor)
             el_grd[i,j,k] = reorder[T(l_nrm + (nhor-l2)*nvert + (l3-1)*nvert*nhor)] 
-          elseif abs(x2_uw_grd_ijk + 1) < toler2 # face 2 (x2 == -1 plane)
-		    l1 = min(div(x1_uw_grd_ijk + 1, Δh) + 1, nhor)
-		    l3 = min(div(x3_uw_grd_ijk + 1, Δh) + 1, nhor)
+          elseif abs(x2_uw2_grd + 1) < toler2 # face 2 (x2 == -1 plane)
+		    l1 = min(div(x1_uw2_grd + 1, Δh) + 1, nhor)
+		    l3 = min(div(x3_uw2_grd + 1, Δh) + 1, nhor)
             el_grd[i,j,k] = reorder[T(l_nrm + (l1-1)*nvert + (l3-1)*nvert*nhor + nblck*1)]
-          elseif abs(x1_uw_grd_ijk - 1) < toler2 # face 3 (x1 == +1 plane)
-		    l2 = min(div(x2_uw_grd_ijk + 1, Δh) + 1, nhor)
-		    l3 = min(div(x3_uw_grd_ijk + 1, Δh) + 1, nhor)
+          elseif abs(x1_uw2_grd - 1) < toler2 # face 3 (x1 == +1 plane)
+		    l2 = min(div(x2_uw2_grd + 1, Δh) + 1, nhor)
+		    l3 = min(div(x3_uw2_grd + 1, Δh) + 1, nhor)
             el_grd[i,j,k] = reorder[T(l_nrm + (l2-1)*nvert + (l3-1)*nvert*nhor + nblck*2 )]
-          elseif abs(x3_uw_grd_ijk - 1) < toler2 # face 4 (x3 == +1 plane)
-  		    l1 = min(div(x1_uw_grd_ijk + 1, Δh) + 1, nhor)
-		    l2 = min(div(x2_uw_grd_ijk + 1, Δh) + 1, nhor)
+          elseif abs(x3_uw2_grd - 1) < toler2 # face 4 (x3 == +1 plane)
+  		    l1 = min(div(x1_uw2_grd + 1, Δh) + 1, nhor)
+		    l2 = min(div(x2_uw2_grd + 1, Δh) + 1, nhor)
             el_grd[i,j,k] = reorder[T(l_nrm + (l1-1)*nvert + (l2-1)*nvert*nhor + nblck*3)]
-          elseif abs(x2_uw_grd_ijk - 1) < toler2 # face 5 (x2 == +1 plane)
-	        l1 = min(div(x1_uw_grd_ijk + 1, Δh) + 1, nhor)
-		    l3 = min(div(x3_uw_grd_ijk + 1, Δh) + 1, nhor)
+          elseif abs(x2_uw2_grd - 1) < toler2 # face 5 (x2 == +1 plane)
+	        l1 = min(div(x1_uw2_grd + 1, Δh) + 1, nhor)
+		    l3 = min(div(x3_uw2_grd + 1, Δh) + 1, nhor)
             el_grd[i,j,k] = reorder[T(l_nrm + (l1-1)*nvert + (nhor-l3)*nvert*nhor + nblck*4 )]
-          elseif abs(x3_uw_grd_ijk + 1) < toler2 # face 6 (x3 == -1 plane)
-		    l1 = min(div(x1_uw_grd_ijk + 1, Δh) + 1, nhor)
-		    l2 = min(div(x2_uw_grd_ijk + 1, Δh) + 1, nhor)
+          elseif abs(x3_uw2_grd + 1) < toler2 # face 6 (x3 == -1 plane)
+		    l1 = min(div(x1_uw2_grd + 1, Δh) + 1, nhor)
+		    l2 = min(div(x2_uw2_grd + 1, Δh) + 1, nhor)
             el_grd[i,j,k] = reorder[T(l_nrm + (l1-1)*nvert + (nhor-l2)*nvert*nhor + nblck*5)]
           else
             error("error: unwrapped grid does on lie on any of the 6 faces")
           end
+          #--------------------------------
+          #---testing-----------------------------
+#          it = 1; jt = 1; kt = 1
+#          if i==it && j==jt && k == kt
+#            println("testing")
+            elm = el_grd[i,j,k]
+            X = grid.topology.elemtocoord[1,:,el_grd[i,j,k]]
+            Y = grid.topology.elemtocoord[2,:,el_grd[i,j,k]]
+            Z = grid.topology.elemtocoord[3,:,el_grd[i,j,k]]
+            ξ = invert_trilear_mapping_hex(X, Y, Z, uw_grd)
+            println("Elem # ",el_grd[i,j,k],"; ξ = ", ξ)
+#          end
           #--------------------------------
       end
     end
@@ -252,10 +266,64 @@ struct Interpolation_Cubed_Sphere{T <: Integer, FT <: AbstractFloat}
   return new{T, FT}(El, Nel, lat_min, long_min, rad_min, lat_max, long_max, rad_max, lat_res, long_res, rad_res, 
                     lat_grd, long_grd, rad_grd, n_lat, n_long, n_rad, el_grd)
     #-----------------------------------------------------------------------------------
-
 end # Inner constructor function Interpolation_Cubed_Sphere
-
-
 end # structure Interpolation_Cubed_Sphere
+#--------------------------------------------------------
+# This function computes (ξ1,ξ2,ξ3) given (x1,x2,x3) and the (8) vertex coordinates of a Hexahedron
+function invert_trilear_mapping_hex(X1::Array{FT}, X2::Array{FT}, X3::Array{FT}, x::Array{FT}) where FT <: AbstractFloat 
+  tol    = eps(FT) * 4.0 # tolerance for Newton-Raphson solver
+  max_it = 10            # maximum # of iterations
+  ξ      = zeros(FT,3,1) # initial guess => cell centroid
+
+  d   = trilinear_map(ξ, X1, X2, X3) - x
+  err = norm(d)
+  ctr = 0 
+  #---Newton-Raphson iterations---------------------------
+  while err > tol
+    trilinear_map_IJac_x_vec!(ξ, X1, X2, X3, d)
+    ξ .-= d
+    d = trilinear_map(ξ, X1, X2, X3) - x
+    err = norm(d)
+    ctr += 1
+    if ( ctr > max_it )
+      error("invert_trilinear_mapping_hex: Newton-Raphson not converging to desired tolerance after max_it iterations")
+    end
+  end
+  #-------------------------------------------------------
+  return ξ
+end
+#--------------------------------------------------------
+function trilinear_map(ξ::Array{FT}, x1v::Array{FT}, x2v::Array{FT}, x3v::Array{FT}) where FT <: AbstractFloat
+  x = Array{FT}(undef,3)
+  for (vert,dim) = zip((x1v,x2v,x3v),1:3)
+    x[dim] = ((1 - ξ[1]) * (1 - ξ[2]) * (1 - ξ[3]) * vert[1] + (1 + ξ[1]) * (1 - ξ[2]) * (1 - ξ[3]) * vert[2] +
+              (1 - ξ[1]) * (1 + ξ[2]) * (1 - ξ[3]) * vert[3] + (1 + ξ[1]) * (1 + ξ[2]) * (1 - ξ[3]) * vert[4] +
+              (1 - ξ[1]) * (1 - ξ[2]) * (1 + ξ[3]) * vert[5] + (1 + ξ[1]) * (1 - ξ[2]) * (1 + ξ[3]) * vert[6] +
+              (1 - ξ[1]) * (1 + ξ[2]) * (1 + ξ[3]) * vert[7] + (1 + ξ[1]) * (1 + ξ[2]) * (1 + ξ[3]) * vert[8] )/ 8.0
+  end
+  return x
+end
+#--------------------------------------------------------
+function trilinear_map_IJac_x_vec!(ξ::Array{FT}, x1v::Array{FT}, x2v::Array{FT}, x3v::Array{FT}, v::Array{FT}) where FT <: AbstractFloat
+  Jac = zeros(FT, 3,3)
+  for (vert,dim) = zip((x1v,x2v,x3v),1:3)
+    Jac[dim,1] = ((-1) * (1 - ξ[2]) * (1 - ξ[3]) * vert[1] + ( 1) * (1 - ξ[2]) * (1 - ξ[3]) * vert[2] +
+                  (-1) * (1 + ξ[2]) * (1 - ξ[3]) * vert[3] + (+1) * (1 + ξ[2]) * (1 - ξ[3]) * vert[4] +
+                  (-1) * (1 - ξ[2]) * (1 + ξ[3]) * vert[5] + (+1) * (1 - ξ[2]) * (1 + ξ[3]) * vert[6] +
+                  (-1) * (1 + ξ[2]) * (1 + ξ[3]) * vert[7] + (+1) * (1 + ξ[2]) * (1 + ξ[3]) * vert[8] )/ 8.0
+
+    Jac[dim,2] = ((1 - ξ[1]) * (-1) * (1 - ξ[3]) * vert[1] + (1 + ξ[1]) * (-1) * (1 - ξ[3]) * vert[2] +
+                  (1 - ξ[1]) * (+1) * (1 - ξ[3]) * vert[3] + (1 + ξ[1]) * (+1) * (1 - ξ[3]) * vert[4] +
+                  (1 - ξ[1]) * (-1) * (1 + ξ[3]) * vert[5] + (1 + ξ[1]) * (-1) * (1 + ξ[3]) * vert[6] +
+                  (1 - ξ[1]) * (+1) * (1 + ξ[3]) * vert[7] + (1 + ξ[1]) * (+1) * (1 + ξ[3]) * vert[8] )/ 8.0
+
+    Jac[dim,3] = ((1 - ξ[1]) * (1 - ξ[2]) * (-1) * vert[1] + (1 + ξ[1]) * (1 - ξ[2]) * (-1) * vert[2] +
+                  (1 - ξ[1]) * (1 + ξ[2]) * (-1) * vert[3] + (1 + ξ[1]) * (1 + ξ[2]) * (-1) * vert[4] +
+                  (1 - ξ[1]) * (1 - ξ[2]) * (+1) * vert[5] + (1 + ξ[1]) * (1 - ξ[2]) * (+1) * vert[6] +
+                  (1 - ξ[1]) * (1 + ξ[2]) * (+1) * vert[7] + (1 + ξ[1]) * (1 + ξ[2]) * (+1) * vert[8] )/ 8.0
+  end
+  LinearAlgebra.LAPACK.gesv!(Jac,v)
+  return nothing 
+end
 #--------------------------------------------------------
 end # module interploation

@@ -297,6 +297,20 @@ end
 
   intrp_cs = Interpolation_Cubed_Sphere(grid, collect(vert_range), lat_res, long_res, r_res)
 
+  elno = 1
+
+  X1 = x1_un[:,elno];  X2 = x2_un[:,elno];  X3 = x3_un[:,elno]; # vertices of el # elno
+
+  xp = [-1.120, 0.7, -0.6]
+
+  xx1 = vcat(X1,xp[1]); xx2 = vcat(X2,xp[2]); xx3 = vcat(X3,xp[3]) 
+
+  println("xp1 = ", xp[1], "; xp2 = ", xp[2], "; xp3 = ", xp[3])
+
+  ξ = invert_trilear_mapping_hex(X1, X2, X3, xp)
+
+  println("ξ = "); display(ξ)
+
 #  scatter( x1_un[:], x2_un[:], x3_un[:], legend = false)
 
 #  scatter( intrp_cs.x1_uw_grd[:], intrp_cs.x2_uw_grd[:], intrp_cs.x3_uw_grd[:], xlabel = "X", ylabel = "Y", zlabel = "Z", legend = false)
