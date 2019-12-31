@@ -18,101 +18,62 @@ export Interpolation_Brick, interpolate_brick!, Interpolation_Cubed_Sphere, inve
 # Here x = X(ξ1); y = Y(ξ2); z = Z(ξ3)
 
 struct Interpolation_Brick{FT <:AbstractFloat}
-
     El::UnitRange{Int64}
-
     Nel::Integer
 
-    xmin::FT;  ymin::FT;  zmin::FT # domain bounds, min
-    xmax::FT;  ymax::FT;  zmax::FT # & max
-    xres::FT;  yres::FT;  zres::FT # respective resolutions for the uniform grid
-
-    x::Vector{Vector{FT}} # unique x coordinates of interpolation points within each element
-    y::Vector{Vector{FT}} # unique y coordinates of interpolation points within each element
-    z::Vector{Vector{FT}} # unique z coordinates of interpolation points within each element
+    xbnd::Array{FT}        # domain bounds, [2(min/max),ndim]
+    xres::Array{FT}        # resolutions in x1, x2, x3 directions for the uniform grid
 
     ξ1::Vector{Vector{FT}} # unique ξ1 coordinates of interpolation points within each element 
     ξ2::Vector{Vector{FT}} # unique ξ2 coordinates of interpolation points within each element 
     ξ3::Vector{Vector{FT}} # unique ξ3 coordinates of interpolation points within each element 
   
-    xg::Vector{Vector{FT}} # x coordinates of portion of interpolation grid embedded within each element
-    yg::Vector{Vector{FT}} # y coordinates of portion of interpolation grid embedded within each element
-    zg::Vector{Vector{FT}} # z coordinates of portion of interpolation grid embedded within each element
+    x::Vector{Array{FT}}   # x[elno][3,npts] -> (x1,x2,x3) coordinates of portion of interpolation grid embedded within each element 
 
     V::Vector{Vector{FT}}  # interpolated variable within each element
-
-function Interpolation_Brick(grid::DiscontinuousSpectralElementGrid, xres::FT, yres::FT, zres::FT) where FT <: AbstractFloat
-
-    xmin, xmax = FT(minimum( grid.topology.elemtocoord[1,:,:] )), FT(maximum( grid.topology.elemtocoord[1,:,:] ))
-    ymin, ymax = FT(minimum( grid.topology.elemtocoord[2,:,:] )), FT(maximum( grid.topology.elemtocoord[2,:,:] ))
-    zmin, zmax = FT(minimum( grid.topology.elemtocoord[3,:,:] )), FT(maximum( grid.topology.elemtocoord[3,:,:] ))
-
-    xgrd, ygrd, zgrd = range(xmin, xmax, step=xres), range(ymin, ymax, step=yres), range(zmin, zmax, step=zres) 
+#--------------------------------------------------------
+function Interpolation_Brick(grid::DiscontinuousSpectralElementGrid, xres::Array{FT}) where FT <: AbstractFloat
+    T = Integer
+    ndim = 3
+    xbnd = zeros(FT, 2, ndim) # domain bounds (min,max) in each dimension
+    for dim in 1:ndim 
+        xbnd[1,dim], xbnd[2,dim] = FT(minimum( grid.topology.elemtocoord[dim,:,:] )), FT(maximum( grid.topology.elemtocoord[dim,:,:] )) 
+    end
+    x1g, x2g, x3g = range(xbnd[1,1], xbnd[2,1], step=xres[1]), range(xbnd[1,2], xbnd[2,2], step=xres[2]), range(xbnd[1,3], xbnd[2,3], step=xres[3]) 
     #-----------------------------------------------------------------------------------
-    El = grid.topology.realelems # Element (numbers) on the local processor
+    El =  grid.topology.realelems # Element (numbers) on the local processor
+    Nel = length(El)
+    n123  = zeros(T,    ndim)     # # of unique ξ1, ξ2, ξ3 points in each cell
+    xsten = zeros(T, 2, ndim)     # x1, x2, x3 start and end for each brick element
+    xbndl = zeros(T, 2, ndim)     # location of x1,x2,x3 limits (min,max) for each brick element
 
-    np, xst, xen, yst, yen, zst, zen = ntuple( i -> zeros(Integer, length(El)), 7)
-    nx, ny, nz = ntuple( i -> zeros(Integer, length(El)), 3)
-    xminl, xmaxl, yminl, ymaxl, zminl, zmaxl = ntuple( i -> zeros(FT, length(El)), 6) # x,y,z limits for each brick element
+    ξ1, ξ2, ξ3 = map( i -> zeros(FT,i), zeros(T,Nel)), map( i -> zeros(FT,i), zeros(T,Nel)), map( i -> zeros(FT,i), zeros(T,Nel))
+    V  = map( i -> zeros(FT,i), zeros(T,Nel))
+    x  = map( i -> zeros(FT,ndim,i), zeros(T,Nel)) # interpolation grid points embedded in each cell 
     #-----------------------------------------------------------------------------------
-    ectr = 1
-    for el in El
-      xminl[ectr], xmaxl[ectr] = minimum( grid.topology.elemtocoord[1,:,ectr] ), maximum( grid.topology.elemtocoord[1,:,ectr] )
-      yminl[ectr], ymaxl[ectr] = minimum( grid.topology.elemtocoord[2,:,ectr] ), maximum( grid.topology.elemtocoord[2,:,ectr] )
-      zminl[ectr], zmaxl[ectr] = minimum( grid.topology.elemtocoord[3,:,ectr] ), maximum( grid.topology.elemtocoord[3,:,ectr] )
+    for el in 1:Nel
+        for (ξ,xg,dim) in zip((ξ1,ξ2,ξ3), (x1g, x2g, x3g), 1:ndim)
+            xbndl[1,dim], xbndl[2,dim] = minimum( grid.topology.elemtocoord[dim,:,el] ), maximum( grid.topology.elemtocoord[dim,:,el] )
+            xsten[1,dim], xsten[2,dim] = findfirst( temp -> temp ≥ xbndl[1,dim], xg ), findlast( temp -> temp ≤ xbndl[2,dim], xg )
+            n123[dim] = xsten[2,dim] - xsten[1,dim]
+            ξ[el] = Array{FT}(undef,n123[dim])
+            [ ξ[el][i] = 2.0 * ( xg[ xsten[1,dim] + i - 1] - xbndl[1,dim] ) / (xbndl[2,dim]-xbndl[1,dim]) -  1.0 for i in 1:n123[dim] ]
+        end
 
-      xst[ectr], xen[ectr] = findfirst( temp -> temp ≥ xminl[ectr], xgrd ), findlast( temp -> temp ≤ xmaxl[ectr], xgrd )
-      yst[ectr], yen[ectr] = findfirst( temp -> temp ≥ yminl[ectr], ygrd ), findlast( temp -> temp ≤ ymaxl[ectr], ygrd )
-      zst[ectr], zen[ectr] = findfirst( temp -> temp ≥ zminl[ectr], zgrd ), findlast( temp -> temp ≤ zmaxl[ectr], zgrd )
-
-      nx[ectr], ny[ectr], nz[ectr] = xen[ectr]-xst[ectr]+1, yen[ectr]-yst[ectr]+1, zen[ectr]-zst[ectr]+1
-
-      np[ectr] = nx[ectr]*ny[ectr]*nz[ectr]
-
-      ectr += 1 
-    end # el loop
-    #-----------------------------------------------------------------------------------
-    x = map( i -> zeros(FT,i), nx)
-    y = map( i -> zeros(FT,i), ny)
-    z = map( i -> zeros(FT,i), nz)
- 
-    ξ1 = map( i -> zeros(FT,i), nx)
-    ξ2 = map( i -> zeros(FT,i), ny)
-    ξ3 = map( i -> zeros(FT,i), nz)
-
-    xg = map( i -> zeros(FT,i), np)
-    yg = map( i -> zeros(FT,i), np)
-    zg = map( i -> zeros(FT,i), np)
-
-    V = map( i -> zeros(FT,i), np)
-    #-----------------------------------------------------------------------------------
-    ectr = 1
-    for el in El
-        [ x[ectr][i] = xgrd[ xst[ectr] + i - 1] for i in 1:nx[ectr] ]
-        [ y[ectr][i] = ygrd[ yst[ectr] + i - 1] for i in 1:ny[ectr] ]
-        [ z[ectr][i] = zgrd[ zst[ectr] + i - 1] for i in 1:nz[ectr] ]
-
-        [ ξ1[ectr][i] = 2.0 * ( x[ectr][i] - xminl[ectr] ) / (xmaxl[ectr]-xminl[ectr]) -  1.0 for i in 1:nx[ectr] ]
-        [ ξ2[ectr][i] = 2.0 * ( y[ectr][i] - yminl[ectr] ) / (ymaxl[ectr]-yminl[ectr]) -  1.0 for i in 1:ny[ectr] ]
-        [ ξ3[ectr][i] = 2.0 * ( z[ectr][i] - zminl[ectr] ) / (zmaxl[ectr]-zminl[ectr]) -  1.0 for i in 1:nz[ectr] ]
+        x[el] = zeros(FT,ndim,prod(n123))
+        V[el] = zeros(FT,prod(n123))
 
         ctr = 1
 
-        for k in 1:nz[ectr]
-            for j in 1:ny[ectr]
-                for i in 1:nx[ectr]
-                    xg[ectr][ctr] = x[ectr][i]
-                    yg[ectr][ctr] = y[ectr][j]
-                    zg[ectr][ctr] = z[ectr][k]
-                    ctr += 1
-                end
-            end
+        for k in 1:n123[3], j in 1:n123[2], i in 1:n123[1]
+            x[el][1,ctr] = x1g[ xsten[1,1] + i - 1 ]
+            x[el][2,ctr] = x2g[ xsten[1,2] + j - 1 ]
+            x[el][3,ctr] = x3g[ xsten[1,3] + k - 1 ]
+            ctr += 1
         end
-      ectr += 1
     end # el loop
     #-----------------------------------------------------------------------------------
-    Nel = length(El)
-    return new{FT}(El, Nel, xmin, ymin, zmin, xmax, ymax, zmax, xres, yres, zres, x, y, z, ξ1, ξ2, ξ3, xg, yg, zg, V)
+    return new{FT}(El, Nel, xbnd, xres, ξ1, ξ2, ξ3, x, V)
 
 end # function Interpolation_Brick -> inner constructor
 #--------------------------------------------------------
@@ -120,26 +81,23 @@ end # struct Interpolation_Brick
 #--------------------------------------------------------
 function interpolate_brick!(intrp_brck::Interpolation_Brick, sv::AbstractArray{FT}, st_no::T, poly_order::T) where {T <: Integer, FT <: AbstractFloat}
 
-  qm1 = poly_order + 1
-  m1_r, m1_w = GaussQuadrature.legendre(FT,qm1,GaussQuadrature.both)
+    qm1 = poly_order + 1
+    m1_r, m1_w = GaussQuadrature.legendre(FT,qm1,GaussQuadrature.both)
+    #-----for each element elno 
+    for el in 1:intrp_brck.Nel
+        if length(intrp_brck.ξ1[el]) > 0
+            lag    = @view sv[:,st_no,el]
+            g_phir = Elements.interpolationmatrix(m1_r, intrp_brck.ξ1[el])
+            g_phis = Elements.interpolationmatrix(m1_r, intrp_brck.ξ2[el])
+            g_phit = Elements.interpolationmatrix(m1_r, intrp_brck.ξ3[el])
 
-  #-----for each element elno 
-  for el in 1:intrp_brck.Nel
-
-    lag = @view sv[:,st_no,el]
-
-    g_phir = Elements.interpolationmatrix(m1_r, intrp_brck.ξ1[el])
-    g_phis = Elements.interpolationmatrix(m1_r, intrp_brck.ξ2[el])
-    g_phit = Elements.interpolationmatrix(m1_r, intrp_brck.ξ3[el])
-
-    tenspxv_hex!(g_phir, g_phis, g_phit, false, lag, intrp_brck.V[el]) 
+            tenspxv_hex!(g_phir, g_phis, g_phit, false, lag, intrp_brck.V[el]) 
+        end
   #--------------------
   end
-
 end
 #--------------------------------------------------------
 #--------------------------------------------------------
-
 struct Interpolation_Cubed_Sphere{T <: Integer, FT <: AbstractFloat}
 
     El::UnitRange{Int64}
@@ -150,15 +108,23 @@ struct Interpolation_Cubed_Sphere{T <: Integer, FT <: AbstractFloat}
     lat_max::FT;  long_max::FT;  rad_max::FT; # domain bounds, max
     lat_res::FT;  long_res::FT;  rad_res::FT; # respective resolutions for the uniform grid
 
+#    x::Vector{Vector{FT}} # unique x coordinates of interpolation points within each element
+#    y::Vector{Vector{FT}} # unique y coordinates of interpolation points within each element
+#    z::Vector{Vector{FT}} # unique z coordinates of interpolation points within each element
+
+#    ξ1::Vector{Vector{FT}} # unique ξ1 coordinates of interpolation points within each element 
+#    ξ2::Vector{Vector{FT}} # unique ξ2 coordinates of interpolation points within each element 
+#    ξ3::Vector{Vector{FT}} # unique ξ3 coordinates of interpolation points within each element 
+
+
     lat_grd::Array{FT}                        # lat grid locations
     long_grd::Array{FT}                       # long grid locations
     rad_grd::Array{FT}                        # rad grid locations
 
     n_lat::T; n_long::T; n_rad::T;            # # of lat, long & rad grid locations
 
-    el_grd                          # element containing the grid point
-
-
+    el_grd                                    # element containing the grid point
+  #--------------------------------------------------------
   function Interpolation_Cubed_Sphere(grid::DiscontinuousSpectralElementGrid, vert_range::AbstractArray{FT}, lat_res::FT, long_res::FT, rad_res::FT) where {FT <: AbstractFloat}
     T = Integer
 
@@ -285,8 +251,8 @@ function invert_trilear_mapping_hex(X1::Array{FT}, X2::Array{FT}, X3::Array{FT},
     d = trilinear_map(ξ, X1, X2, X3) - x
     err = norm(d)
     ctr += 1
-    if ( ctr > max_it )
-      error("invert_trilinear_mapping_hex: Newton-Raphson not converging to desired tolerance after max_it iterations")
+    if ctr > max_it
+      error("invert_trilinear_mapping_hex: Newton-Raphson not converging to desired tolerance after max_it = ", max_it," iterations")
     end
   end
   #-------------------------------------------------------

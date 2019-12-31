@@ -49,16 +49,16 @@ function run_brick_interpolation_test()
 
   xmin, ymin, zmin = 0, 0, 0                   # defining domain extent
   xmax, ymax, zmax = 2000, 400, 2000
-  xres, yres, zres = FT(200), FT(200), FT(200) # resolution of interpolation grid
+  xres = [FT(200), FT(200), FT(200)] # resolution of interpolation grid
 
-  xgrd = range(xmin, xmax, step=xres) 
-  ygrd = range(ymin, ymax, step=yres) 
-  zgrd = range(zmin, zmax, step=zres) 
+  xgrd = range(xmin, xmax, step=xres[1]) 
+  ygrd = range(ymin, ymax, step=xres[2]) 
+  zgrd = range(zmin, zmax, step=xres[3]) 
 
 #  Ne        = (20,2,20)
   Ne        = (4,2,4)
 
-  polynomialorder = 4 #8 #4
+  polynomialorder = 8 #4
   #-------------------------
   _x, _y, _z = CLIMA.Mesh.Grids.vgeoid.x1id, CLIMA.Mesh.Grids.vgeoid.x2id, CLIMA.Mesh.Grids.vgeoid.x3id
   _ρ, _ρu, _ρv, _ρw = 1, 2, 3, 4
@@ -106,7 +106,7 @@ function run_brick_interpolation_test()
 
   var .= fcn( x1 ./ xmax, x2 ./ ymax, x3 ./ zmax )
   #----calling interpolation function on state variable # st_no--------------------------
-  intrp_brck = Interpolation_Brick(grid, xres, yres, zres)
+  intrp_brck = Interpolation_Brick(grid, xres)
   interpolate_brick!(intrp_brck, Q.data, st_no, polynomialorder)
   #------testing
   Nel = length( grid.topology.realelems )
@@ -115,7 +115,7 @@ function run_brick_interpolation_test()
 
   for elno in 1:Nel
     fex = similar(intrp_brck.V[elno])
-    fex = fcn( intrp_brck.xg[elno] ./ xmax , intrp_brck.yg[elno] ./ ymax , intrp_brck.zg[elno] ./ zmax )
+    fex = fcn( intrp_brck.x[elno][1,:] ./ xmax , intrp_brck.x[elno][2,:] ./ ymax , intrp_brck.x[elno][3,:] ./ zmax )
     error[elno] = maximum(abs.(intrp_brck.V[elno][:]-fex[:]))
   end
 
@@ -228,11 +228,12 @@ end
 #----------------------------------------------------------------------------
 
 
-#run_brick_interpolation_test()
+run_brick_interpolation_test()
 #run_cubed_sphere()
 #------------------------------------------------
 
 #---------contents of function run_cubed_sphere-------------------------------------------------------------------
+#=
   CLIMA.init()
 
   FT = Float64
@@ -341,4 +342,4 @@ end
     
 #  end
 #----------------------------------------------------------------------------
-
+=#
