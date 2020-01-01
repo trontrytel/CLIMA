@@ -10,7 +10,7 @@ using CLIMA.Mesh.Tens
 using LinearAlgebra
 using StaticArrays
 
-export Interpolation_Brick, interpolate_brick!, Interpolation_Cubed_Sphere, invert_trilear_mapping_hex
+export Interpolation_Brick, interpolate_brick!, interpolate_brick_mf!, Interpolation_Cubed_Sphere, invert_trilear_mapping_hex
 
 #--------------------------------------------------------
 
@@ -83,13 +83,14 @@ function interpolate_brick!(intrp_brck::Interpolation_Brick, sv::AbstractArray{F
 
     qm1 = poly_order + 1
     m1_r, m1_w = GaussQuadrature.legendre(FT,qm1,GaussQuadrature.both)
+    wb = Elements.baryweights(m1_r)
     #-----for each element elno 
     for el in 1:intrp_brck.Nel
         if length(intrp_brck.ξ1[el]) > 0
             lag    = @view sv[:,st_no,el]
-            g_phir = Elements.interpolationmatrix(m1_r, intrp_brck.ξ1[el])
-            g_phis = Elements.interpolationmatrix(m1_r, intrp_brck.ξ2[el])
-            g_phit = Elements.interpolationmatrix(m1_r, intrp_brck.ξ3[el])
+            g_phir = Elements.interpolationmatrix(m1_r, intrp_brck.ξ1[el], wb)
+            g_phis = Elements.interpolationmatrix(m1_r, intrp_brck.ξ2[el], wb)
+            g_phit = Elements.interpolationmatrix(m1_r, intrp_brck.ξ3[el], wb)
 
             tenspxv_hex!(g_phir, g_phis, g_phit, false, lag, intrp_brck.V[el]) 
         end
@@ -97,6 +98,45 @@ function interpolate_brick!(intrp_brck::Interpolation_Brick, sv::AbstractArray{F
   end
 end
 #--------------------------------------------------------
+function interpolate_brick_mf!(intrp_brck::Interpolation_Brick, sv::AbstractArray{FT}, st_no::T, poly_order::T) where {T <: Integer, FT <: AbstractFloat}
+    qm1 = poly_order + 1
+    m1_r, m1_w = GaussQuadrature.legendre(FT,qm1,GaussQuadrature.both)
+    wb = Elements.baryweights(m1_r)
+    phir = Vector{FT}(undef,qm1)
+    phis = Vector{FT}(undef,qm1)
+    phit = Vector{FT}(undef,qm1)
+
+    for el in 1:intrp_brck.Nel #-----for each element elno 
+        if length(intrp_brck.ξ1[el]) > 0
+            l1 = length(intrp_brck.ξ1[el]); l2 = length(intrp_brck.ξ2[el]); l3 = length(intrp_brck.ξ3[el]) 
+            lag    = @view sv[:,st_no,el]
+            for k in 1:l3, j in 1:l2, i in 1:l1 # interpolating point-by-point
+                ξ1 = intrp_brck.ξ1[el][i]
+                ξ2 = intrp_brck.ξ2[el][j]
+                ξ3 = intrp_brck.ξ3[el][k]
+
+                for (ξ,phi) in zip((ξ1,ξ2,ξ3),(phir,phis,phit))
+                    for ib in 1:qm1
+                        if ξ==m1_r[ib]
+                            phi .= FT(0); phi[ib] = FT(1); break;
+                        else
+                            phi[ib] = wb[ib] / (ξ-m1_r[ib])
+                        end
+                    end
+                    d = sum(phi)
+                    phi ./= d 
+                end
+
+                intrp_brck.V[el][i + (j-1)*l1 + (k-1)*l1*l2] = 0.0
+                for ik in 1:qm1, ij in 1:qm1, ii in 1:qm1
+                    intrp_brck.V[el][i + (j-1)*l1 + (k-1)*l1*l2] += lag[ii + (ij-1)*qm1 + (ik-1)*qm1*qm1] * 
+                                                                    phir[ii] * phis[ij] * phit[ik]
+                end
+            end
+        end
+  #--------------------
+  end
+end
 #--------------------------------------------------------
 struct Interpolation_Cubed_Sphere{T <: Integer, FT <: AbstractFloat}
 
@@ -108,24 +148,20 @@ struct Interpolation_Cubed_Sphere{T <: Integer, FT <: AbstractFloat}
     lat_max::FT;  long_max::FT;  rad_max::FT; # domain bounds, max
     lat_res::FT;  long_res::FT;  rad_res::FT; # respective resolutions for the uniform grid
 
-#    x::Vector{Vector{FT}} # unique x coordinates of interpolation points within each element
-#    y::Vector{Vector{FT}} # unique y coordinates of interpolation points within each element
-#    z::Vector{Vector{FT}} # unique z coordinates of interpolation points within each element
-
-#    ξ1::Vector{Vector{FT}} # unique ξ1 coordinates of interpolation points within each element 
-#    ξ2::Vector{Vector{FT}} # unique ξ2 coordinates of interpolation points within each element 
-#    ξ3::Vector{Vector{FT}} # unique ξ3 coordinates of interpolation points within each element 
-
-
-    lat_grd::Array{FT}                        # lat grid locations
-    long_grd::Array{FT}                       # long grid locations
-    rad_grd::Array{FT}                        # rad grid locations
-
     n_lat::T; n_long::T; n_rad::T;            # # of lat, long & rad grid locations
 
-    el_grd                                    # element containing the grid point
+    ξ1::Vector{Vector{FT}} # ξ1 coordinates of interpolation points within each element 
+    ξ2::Vector{Vector{FT}} # ξ2 coordinates of interpolation points within each element 
+    ξ3::Vector{Vector{FT}} # ξ3 coordinates of interpolation points within each element 
+
+
+    radc::Vector{Vector{FT}}  # rad coordinates of interpolation points within each element
+    latc::Vector{Vector{FT}}  # lat coordinates of interpolation points within each element
+    longc::Vector{Vector{FT}} # long coordinates of interpolation points within each element
+
+    V::Vector{Vector{FT}}  # interpolated variable within each element
   #--------------------------------------------------------
-  function Interpolation_Cubed_Sphere(grid::DiscontinuousSpectralElementGrid, vert_range::AbstractArray{FT}, lat_res::FT, long_res::FT, rad_res::FT) where {FT <: AbstractFloat}
+function Interpolation_Cubed_Sphere(grid::DiscontinuousSpectralElementGrid, vert_range::AbstractArray{FT}, lat_res::FT, long_res::FT, rad_res::FT) where {FT <: AbstractFloat}
     T = Integer
 
     toler1 = eps(FT) * vert_range[1] * 2.0 # tolerance for unwarp function
@@ -138,9 +174,9 @@ struct Interpolation_Cubed_Sphere{T <: Integer, FT <: AbstractFloat}
     El = grid.topology.realelems # Element (numbers) on the local processor
     Nel = length(El)
 
-    Nel_global = length(grid.topology.elems)
+    Nel_glob = length(grid.topology.elems)
     nvert = length(vert_range) - 1              # # of elements in vertical direction
-    nhor  = T( sqrt( Nel_global / nvert / 6) )  # # of elements in horizontal direction
+    nhor  = T( sqrt( Nel_glob / nvert / 6) )  # # of elements in horizontal direction
     nblck = nhor * nhor * nvert
     Δh = 2.0 / nhor                             # horizontal grid spacing in unwarped grid
 
@@ -148,10 +184,8 @@ struct Interpolation_Cubed_Sphere{T <: Integer, FT <: AbstractFloat}
 
     n_lat, n_long, n_rad = T(length(lat_grd)), T(length(long_grd)), T(length(rad_grd))
 
-    el_grd = Array{T}(undef, n_rad, n_lat, n_long) # element containing the lat/long/rad grid point 
     uw_grd = zeros(FT, 3, 1)
     #---------------------------------------------- 
-
     flip_ord = invperm(grid.topology.origsendorder) # to account for reordering of elements after the partitioning process 
 
     reorder = zeros(T, 6*nvert*nhor*nhor)
@@ -161,78 +195,80 @@ struct Interpolation_Cubed_Sphere{T <: Integer, FT <: AbstractFloat}
     end
 
     temp = invperm(grid.topology.origsendorder) 
+    ξ1, ξ2, ξ3        = map( i -> zeros(FT,i), zeros(T,Nel)), map( i -> zeros(FT,i), zeros(T,Nel)), map( i -> zeros(FT,i), zeros(T,Nel))
+    radc, latc, longc = map( i -> zeros(FT,i), zeros(T,Nel)), map( i -> zeros(FT,i), zeros(T,Nel)), map( i -> zeros(FT,i), zeros(T,Nel))
+    V                 = map( i -> zeros(FT,i), zeros(T,Nel))
 
-    for k in 1:n_long
-      for j in 1:n_lat
-        for i in 1:n_rad 
-          x1_grd = rad_grd[i] * sin(lat_grd[j]) * cos(long_grd[k]) # inclination -> latitude; azimuthal -> longitude.
-          x2_grd = rad_grd[i] * sin(lat_grd[j]) * sin(long_grd[k]) # inclination -> latitude; azimuthal -> longitude.
-          x3_grd = rad_grd[i] * cos(lat_grd[j])   
+    for k in 1:n_long, j in 1:n_lat, i in 1:n_rad 
+        x1_grd = rad_grd[i] * sin(lat_grd[j]) * cos(long_grd[k]) # inclination -> latitude; azimuthal -> longitude.
+        x2_grd = rad_grd[i] * sin(lat_grd[j]) * sin(long_grd[k]) # inclination -> latitude; azimuthal -> longitude.
+        x3_grd = rad_grd[i] * cos(lat_grd[j])   
 
-          uw_grd[1], uw_grd[2], uw_grd[3] = Topologies.cubedshellunwarp(x1_grd, x2_grd, x3_grd) # unwarping from sphere to cubed shell
-          rad = FT(maximum(abs.(uw_grd)))
-          #--------------------------------
-          x1_uw2_grd = uw_grd[1] / rad # unwrapping cubed shell on to a 2D grid (in 3D space, -1 to 1 cube)
-          x2_uw2_grd = uw_grd[2] / rad
-          x3_uw2_grd = uw_grd[3] / rad
-          #--------------------------------
-          if rad ≤ vert_range[1]       # accounting for minor rounding errors from unwarp function at boundaries 
-            vert_range[1] - rad < toler1 ? l_nrm = 1 :  error("fatal error, rad lower than inner radius")
-          elseif rad ≥ vert_range[end] # accounting for minor rounding errors from unwarp function at boundaries 
-            rad - vert_range[end] < toler1 ? l_nrm = nvert : error("fatal error, rad greater than outer radius")
-          else                         # normal scenario
-            l_nrm = findfirst( X -> X .- rad .> 0.0, vert_range ) - 1 # identify stack bin 
-          end
-          #--------------------------------
-          if     abs(x1_uw2_grd + 1) < toler2 # face 1 (x1 == -1 plane)
+        uw_grd[1], uw_grd[2], uw_grd[3] = Topologies.cubedshellunwarp(x1_grd, x2_grd, x3_grd) # unwarping from sphere to cubed shell
+        rad = FT(maximum(abs.(uw_grd)))
+        #--------------------------------
+        x1_uw2_grd = uw_grd[1] / rad # unwrapping cubed shell on to a 2D grid (in 3D space, -1 to 1 cube)
+        x2_uw2_grd = uw_grd[2] / rad
+        x3_uw2_grd = uw_grd[3] / rad
+        #--------------------------------
+        if rad ≤ vert_range[1]       # accounting for minor rounding errors from unwarp function at boundaries 
+          vert_range[1] - rad < toler1 ? l_nrm = 1 :  error("fatal error, rad lower than inner radius")
+        elseif rad ≥ vert_range[end] # accounting for minor rounding errors from unwarp function at boundaries 
+          rad - vert_range[end] < toler1 ? l_nrm = nvert : error("fatal error, rad greater than outer radius")
+        else                         # normal scenario
+          l_nrm = findfirst( X -> X .- rad .> 0.0, vert_range ) - 1 # identify stack bin 
+        end
+        #--------------------------------
+        if     abs(x1_uw2_grd + 1) < toler2 # face 1 (x1 == -1 plane)
 		    l2 = min(div(x2_uw2_grd + 1, Δh) + 1, nhor)
 		    l3 = min(div(x3_uw2_grd + 1, Δh) + 1, nhor)
-            el_grd[i,j,k] = reorder[T(l_nrm + (nhor-l2)*nvert + (l3-1)*nvert*nhor)] 
-          elseif abs(x2_uw2_grd + 1) < toler2 # face 2 (x2 == -1 plane)
+            el_glob = reorder[T(l_nrm + (nhor-l2)*nvert + (l3-1)*nvert*nhor)] 
+        elseif abs(x2_uw2_grd + 1) < toler2 # face 2 (x2 == -1 plane)
 		    l1 = min(div(x1_uw2_grd + 1, Δh) + 1, nhor)
 		    l3 = min(div(x3_uw2_grd + 1, Δh) + 1, nhor)
-            el_grd[i,j,k] = reorder[T(l_nrm + (l1-1)*nvert + (l3-1)*nvert*nhor + nblck*1)]
-          elseif abs(x1_uw2_grd - 1) < toler2 # face 3 (x1 == +1 plane)
+            el_glob = reorder[T(l_nrm + (l1-1)*nvert + (l3-1)*nvert*nhor + nblck*1)]
+        elseif abs(x1_uw2_grd - 1) < toler2 # face 3 (x1 == +1 plane)
 		    l2 = min(div(x2_uw2_grd + 1, Δh) + 1, nhor)
 		    l3 = min(div(x3_uw2_grd + 1, Δh) + 1, nhor)
-            el_grd[i,j,k] = reorder[T(l_nrm + (l2-1)*nvert + (l3-1)*nvert*nhor + nblck*2 )]
-          elseif abs(x3_uw2_grd - 1) < toler2 # face 4 (x3 == +1 plane)
+            el_glob = reorder[T(l_nrm + (l2-1)*nvert + (l3-1)*nvert*nhor + nblck*2 )]
+        elseif abs(x3_uw2_grd - 1) < toler2 # face 4 (x3 == +1 plane)
   		    l1 = min(div(x1_uw2_grd + 1, Δh) + 1, nhor)
 		    l2 = min(div(x2_uw2_grd + 1, Δh) + 1, nhor)
-            el_grd[i,j,k] = reorder[T(l_nrm + (l1-1)*nvert + (l2-1)*nvert*nhor + nblck*3)]
-          elseif abs(x2_uw2_grd - 1) < toler2 # face 5 (x2 == +1 plane)
+            el_glob = reorder[T(l_nrm + (l1-1)*nvert + (l2-1)*nvert*nhor + nblck*3)]
+        elseif abs(x2_uw2_grd - 1) < toler2 # face 5 (x2 == +1 plane)
 	        l1 = min(div(x1_uw2_grd + 1, Δh) + 1, nhor)
 		    l3 = min(div(x3_uw2_grd + 1, Δh) + 1, nhor)
-            el_grd[i,j,k] = reorder[T(l_nrm + (l1-1)*nvert + (nhor-l3)*nvert*nhor + nblck*4 )]
-          elseif abs(x3_uw2_grd + 1) < toler2 # face 6 (x3 == -1 plane)
+            el_glob = reorder[T(l_nrm + (l1-1)*nvert + (nhor-l3)*nvert*nhor + nblck*4 )]
+        elseif abs(x3_uw2_grd + 1) < toler2 # face 6 (x3 == -1 plane)
 		    l1 = min(div(x1_uw2_grd + 1, Δh) + 1, nhor)
 		    l2 = min(div(x2_uw2_grd + 1, Δh) + 1, nhor)
-            el_grd[i,j,k] = reorder[T(l_nrm + (l1-1)*nvert + (nhor-l2)*nvert*nhor + nblck*5)]
-          else
+            el_glob = reorder[T(l_nrm + (l1-1)*nvert + (nhor-l2)*nvert*nhor + nblck*5)]
+        else
             error("error: unwrapped grid does on lie on any of the 6 faces")
-          end
-          #--------------------------------
-          #---testing-----------------------------
-#          it = 1; jt = 1; kt = 1
-#          if i==it && j==jt && k == kt
-#            println("testing")
-            elm = el_grd[i,j,k]
-            X = grid.topology.elemtocoord[1,:,el_grd[i,j,k]]
-            Y = grid.topology.elemtocoord[2,:,el_grd[i,j,k]]
-            Z = grid.topology.elemtocoord[3,:,el_grd[i,j,k]]
-            ξ = invert_trilear_mapping_hex(X, Y, Z, uw_grd)
-            println("Elem # ",el_grd[i,j,k],"; ξ = ", ξ)
-#          end
-          #--------------------------------
-      end
+        end
+        #--------------------------------
+        el_loc = findfirst(X -> X-el_glob == 0, El)
+        if ( el_loc ≠ nothing ) # computing inner coordinates for local elements
+            ξ = invert_trilear_mapping_hex(grid.topology.elemtocoord[1,:,el_loc], 
+                                             grid.topology.elemtocoord[2,:,el_loc], 
+                                             grid.topology.elemtocoord[3,:,el_loc], uw_grd)
+            push!(ξ1[el_loc],ξ[1]) 
+            push!(ξ2[el_loc],ξ[2]) 
+            push!(ξ3[el_loc],ξ[3]) 
+            push!(radc[el_loc],  rad_grd[i])
+            push!(latc[el_loc],  lat_grd[j]) 
+            push!(longc[el_loc],long_grd[k])
+        end
+        #--------------------------------
     end
-  end
  
+  [ V[el] = Vector{FT}(undef, length(radc[el])) for el in 1:Nel ]
 
   return new{T, FT}(El, Nel, lat_min, long_min, rad_min, lat_max, long_max, rad_max, lat_res, long_res, rad_res, 
-                    lat_grd, long_grd, rad_grd, n_lat, n_long, n_rad, el_grd)
-    #-----------------------------------------------------------------------------------
+                    n_lat, n_long, n_rad, ξ1, ξ2, ξ3, radc, latc, longc, V)
+#-----------------------------------------------------------------------------------
 end # Inner constructor function Interpolation_Cubed_Sphere
+#-----------------------------------------------------------------------------------
 end # structure Interpolation_Cubed_Sphere
 #--------------------------------------------------------
 # This function computes (ξ1,ξ2,ξ3) given (x1,x2,x3) and the (8) vertex coordinates of a Hexahedron
