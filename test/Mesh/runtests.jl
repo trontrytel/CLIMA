@@ -11,6 +11,8 @@ include("grid_integral.jl")
 include("filter.jl")
 include("Geometry.jl")
 
+include("interpolation.jl")
+
 # runmpi won't work if we do not finalize
 # This is not so nice since other tests that are run direction and call MPI.Init
 # will fail if we do finalize here (since runmpi won't work in an initialized

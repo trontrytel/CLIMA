@@ -166,6 +166,7 @@ function Interpolation_Cubed_Sphere(grid::DiscontinuousSpectralElementGrid, vert
 
     toler1 = eps(FT) * vert_range[1] * 2.0 # tolerance for unwarp function
     toler2 = eps(FT) * 4.0                 # tolerance 
+    toler3 = eps(FT) * vert_range[1] * 4.0 # tolerance for Newton-Raphson 
 
     lat_min,   lat_max = FT(0.0), FT(π)                 # inclination/zeinth angle range
     long_min, long_max = FT(0.0), FT(2*π)  			    # azimuthal angle range
@@ -251,7 +252,7 @@ function Interpolation_Cubed_Sphere(grid::DiscontinuousSpectralElementGrid, vert
         if ( el_loc ≠ nothing ) # computing inner coordinates for local elements
             ξ = invert_trilear_mapping_hex(grid.topology.elemtocoord[1,:,el_loc], 
                                              grid.topology.elemtocoord[2,:,el_loc], 
-                                             grid.topology.elemtocoord[3,:,el_loc], uw_grd)
+                                             grid.topology.elemtocoord[3,:,el_loc], uw_grd, toler3)
             push!(ξ1[el_loc],ξ[1]) 
             push!(ξ2[el_loc],ξ[2]) 
             push!(ξ3[el_loc],ξ[3]) 
@@ -272,8 +273,8 @@ end # Inner constructor function Interpolation_Cubed_Sphere
 end # structure Interpolation_Cubed_Sphere
 #--------------------------------------------------------
 # This function computes (ξ1,ξ2,ξ3) given (x1,x2,x3) and the (8) vertex coordinates of a Hexahedron
-function invert_trilear_mapping_hex(X1::Array{FT}, X2::Array{FT}, X3::Array{FT}, x::Array{FT}) where FT <: AbstractFloat 
-  tol    = eps(FT) * 4.0 # tolerance for Newton-Raphson solver
+function invert_trilear_mapping_hex(X1::Array{FT}, X2::Array{FT}, X3::Array{FT}, x::Array{FT}, tol::FT) where FT <: AbstractFloat 
+#  tol    = eps(FT) * 4.0 # tolerance for Newton-Raphson solver
   max_it = 10            # maximum # of iterations
   ξ      = zeros(FT,3,1) # initial guess => cell centroid
 
@@ -288,7 +289,7 @@ function invert_trilear_mapping_hex(X1::Array{FT}, X2::Array{FT}, X3::Array{FT},
     err = norm(d)
     ctr += 1
     if ctr > max_it
-      error("invert_trilinear_mapping_hex: Newton-Raphson not converging to desired tolerance after max_it = ", max_it," iterations")
+      error("invert_trilinear_mapping_hex: Newton-Raphson not converging to desired tolerance after max_it = ", max_it," iterations; err = ", err,"; toler = ", tol)
     end
   end
   #-------------------------------------------------------
