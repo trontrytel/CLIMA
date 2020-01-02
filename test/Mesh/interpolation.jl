@@ -157,7 +157,7 @@ function run_cubed_sphere()
   logger_stream = MPI.Comm_rank(mpicomm) == 0 ? stderr : devnull
   global_logger(ConsoleLogger(logger_stream, loglevel))
 
-  polynomialorder = 4#1#4 #5
+  polynomialorder = 12#1#4 #5
   numelem_horz = 3#4 #6
   numelem_vert = 4#1 #1 #1#6 #8
 
@@ -201,57 +201,58 @@ function run_cubed_sphere()
   x1 = @view grid.vgeo[:,_x,:]
   x2 = @view grid.vgeo[:,_y,:]
   x3 = @view grid.vgeo[:,_z,:]
+
+  xmax = maximum( abs.(x1) )
+  ymax = maximum( abs.(x2) )
+  zmax = maximum( abs.(x3) )
+
+  st_no = _ρ # state vector
+
+  var = @view Q.data[:,st_no,:]
+
+#  fcn(x,y,z) = x .* y .* z # sample function
+  fcn(x,y,z) = sin.(x) .* cos.(y) .* cos.(z) # sample function
+
+  var .= fcn( x1 ./ xmax, x2 ./ ymax, x3 ./ zmax )
   #------------------------------
-  x1_un = @view grid.topology.elemtocoord[1,:,:] # elemtocoord[x/y/z,,vert#, elem#] 
-  x2_un = @view grid.topology.elemtocoord[2,:,:] 
-  x3_un = @view grid.topology.elemtocoord[3,:,:]
+#  x1_un = @view grid.topology.elemtocoord[1,:,:] # elemtocoord[x/y/z,,vert#, elem#] 
+#  x2_un = @view grid.topology.elemtocoord[2,:,:] 
+#  x3_un = @view grid.topology.elemtocoord[3,:,:]
 
 
   intrp_cs = Interpolation_Cubed_Sphere(grid, collect(vert_range), lat_res, long_res, r_res)
 
-  elno = 1
 
-  X1 = x1_un[:,elno];  X2 = x2_un[:,elno];  X3 = x3_un[:,elno]; # vertices of el # elno
-
-  xp = [-1.120, 0.7, -0.6]
-
-  xx1 = vcat(X1,xp[1]); xx2 = vcat(X2,xp[2]); xx3 = vcat(X3,xp[3]) 
-
-  println("xp1 = ", xp[1], "; xp2 = ", xp[2], "; xp3 = ", xp[3])
-
-  ξ = invert_trilear_mapping_hex(X1, X2, X3, xp)
-
-  println("ξ = "); display(ξ)
+  interpolate_cubed_sphere!(intrp_cs, Q.data, st_no, polynomialorder)
   #----------------------------------------------------------
-#  scatter( x1_un[:], x2_un[:], x3_un[:], legend = false)
 
-#  scatter( intrp_cs.x1_uw_grd[:], intrp_cs.x2_uw_grd[:], intrp_cs.x3_uw_grd[:], xlabel = "X", ylabel = "Y", zlabel = "Z", legend = false)
+  Nel = length( grid.topology.realelems )
 
-#  xx = intrp_cs.x1_uw_grd[:]
-#  yy = intrp_cs.x2_uw_grd[:]
-#  zz = intrp_cs.x3_uw_grd[:]
+  error = zeros(FT, Nel) 
 
-#toler = 1e-12
-#loc = (abs.(xx .- 1) .< toler) .* (abs.(xx .+ 1) .> toler) .* 
-#      (abs.(yy .- 1) .< toler) .* (abs.(yy .+ 1) .> toler) .* 
-#      (abs.(zz .- 1) .< toler) .* (abs.(zz .+ 1) .> toler);
+  for elno in 1:Nel
+    if ( length(intrp_cs.V[elno]) > 0 )
+        fex = similar(intrp_cs.V[elno])
+        x1g = similar(intrp_cs.V[elno])
+        x2g = similar(intrp_cs.V[elno])
+        x3g = similar(intrp_cs.V[elno])
 
-#=  for k in 1:numelem_horz
-    println("=======k = ",k,"====================================")
-    for j in 1:numelem_vert
-    i = j + (k-1)*numelem_vert
-    println("xm = ", sum(x1_un[:,i])/length(x1_un[:,i]), "; ym = ", sum(x2_un[:,i])/length(x2_un[:,i]),  "; zm = ", sum(x3_un[:,i])/length(x3_un[:,i] ) )
+        x1_grd = intrp_cs.radc[elno] .* sin.(intrp_cs.latc[elno]) .* cos.(intrp_cs.longc[elno]) # inclination -> latitude; azimuthal -> longitude.
+        x2_grd = intrp_cs.radc[elno] .* sin.(intrp_cs.latc[elno]) .* sin.(intrp_cs.longc[elno]) # inclination -> latitude; azimuthal -> longitude.
+        x3_grd = intrp_cs.radc[elno] .* cos.(intrp_cs.latc[elno])
+        
+        fex = fcn( x1_grd ./ xmax , x2_grd ./ ymax , x3_grd ./ zmax )
+        error[elno] = maximum(abs.(intrp_cs.V[elno][:]-fex[:]))
     end
-    println("===========================================")
   end
-=#
-#  for i in 1:length(grid.topology.realelems)
-#    println(i,"). xm = ",mean(x1[:,i]), "; ym = ", mean(x2[:,i]), "; zm = ",  mean(x3[:,i]))
-#    if mod(i, length(grid.topology.realelems)/6  ) == 0
-#        println("----------------------------------------------------")
-#    end
-    
-#  end
+  #----------------------------------------------------------
+  println("==============================================")
+  println("l_infinity interpolation error in each element")
+  display(error)
+  l_infinity_domain = maximum(error)
+  println("l_infinity interpolation error in domain")
+  display(l_infinity_domain)
+  println("==============================================")
 #----------------------------------------------------------------------------
 
 end 
@@ -282,7 +283,7 @@ end
 #----------------------------------------------------------------------------
 
 
-run_brick_interpolation_test()
-#run_cubed_sphere()
+#run_brick_interpolation_test()
+run_cubed_sphere()
 #------------------------------------------------
 

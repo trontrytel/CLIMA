@@ -10,7 +10,7 @@ using CLIMA.Mesh.Tens
 using LinearAlgebra
 using StaticArrays
 
-export Interpolation_Brick, interpolate_brick!, interpolate_brick_mf!, Interpolation_Cubed_Sphere, invert_trilear_mapping_hex
+export Interpolation_Brick, interpolate_brick!, interpolate_brick_mf!, Interpolation_Cubed_Sphere, invert_trilear_mapping_hex, interpolate_cubed_sphere!
 
 #--------------------------------------------------------
 
@@ -326,6 +326,45 @@ function trilinear_map_IJac_x_vec!(ξ::Array{FT}, x1v::Array{FT}, x2v::Array{FT}
   end
   LinearAlgebra.LAPACK.gesv!(Jac,v)
   return nothing 
+end
+#--------------------------------------------------------
+function interpolate_cubed_sphere!(intrp_cs::Interpolation_Cubed_Sphere, sv::AbstractArray{FT}, st_no::T, poly_order::T) where {T <: Integer, FT <: AbstractFloat}
+    qm1 = poly_order + 1
+    m1_r, m1_w = GaussQuadrature.legendre(FT,qm1,GaussQuadrature.both)
+    wb = Elements.baryweights(m1_r)
+    phir = Vector{FT}(undef,qm1)
+    phis = Vector{FT}(undef,qm1)
+    phit = Vector{FT}(undef,qm1)
+
+    for el in 1:intrp_cs.Nel #-----for each element elno 
+        np = length(intrp_cs.ξ1[el])
+        lag    = @view sv[:,st_no,el]
+        for i in 1:np # interpolating point-by-point
+            ξ1 = intrp_cs.ξ1[el][i]
+            ξ2 = intrp_cs.ξ2[el][i]
+            ξ3 = intrp_cs.ξ3[el][i]
+
+            for (ξ,phi) in zip((ξ1,ξ2,ξ3),(phir,phis,phit))
+                for ib in 1:qm1
+                    if ξ==m1_r[ib]
+                        phi .= FT(0); phi[ib] = FT(1); break;
+                    else
+                        phi[ib] = wb[ib] / (ξ-m1_r[ib])
+                    end
+                end
+                d = sum(phi)
+                phi ./= d 
+            end
+
+            intrp_cs.V[el][i] = 0.0
+            for ik in 1:qm1, ij in 1:qm1, ii in 1:qm1
+                intrp_cs.V[el][i] += lag[ii + (ij-1)*qm1 + (ik-1)*qm1*qm1] * 
+                                     phir[ii] * phis[ij] * phit[ik]
+            end
+        end
+  #--------------------
+  end
+  #--------------------
 end
 #--------------------------------------------------------
 end # module interploation
