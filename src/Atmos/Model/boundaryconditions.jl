@@ -232,9 +232,9 @@ $(DocStringExtensions.FIELDS)
 """
 struct RayleighBenardBC{FT} <: BoundaryCondition
   "Prescribed bottom wall temperature [K]"
-  T_bot::FT
+  T_bot::U(FT,:temp)
   "Prescribed top wall temperature [K]"
-  T_top::FT
+  T_top::U(FT,:temp)
 end
 # Rayleigh-Benard problem with two fixed walls (prescribed temperatures)
 function atmos_boundary_state!(nf::Union{NumericalFluxNonDiffusive, NumericalFluxGradient},
@@ -275,7 +275,7 @@ function atmos_boundary_state!(::NumericalFluxDiffusive, bc::RayleighBenardBC,
       E_intP = ρP * cv_d * (bc.T_top - T_0)
     end
     stateP.ρe = (E_intP + ρP * auxP.coord[3] * grav)
-    diffP.∇h_tot = SVector(diffP.∇h_tot[1], diffP.∇h_tot[2], FT(0))
+    diffP.∇h_tot = SVector(diffP.∇h_tot[1], diffP.∇h_tot[2], FT(0)*u"kg*m/s^2") #FIXME
     nothing
   end
 end
