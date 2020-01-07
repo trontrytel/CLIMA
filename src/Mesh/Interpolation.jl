@@ -114,15 +114,12 @@ function interpolate_brick!(intrp_brck::InterpolationBrick, sv::AbstractArray{FT
         if length(intrp_brck.ξ1[el]) > 0
             l1 = length(intrp_brck.ξ1[el]); l2 = length(intrp_brck.ξ2[el]); l3 = length(intrp_brck.ξ3[el]) 
             lag    = @view sv[:,st_no,el]
-#            lag    = reshape( sv[:,st_no,el], qm1, qm1, qm1)
 
-#            phirt = transpose(Elements.interpolationmatrix(m1_r, intrp_brck.ξ1[el], wb))
             phir = Elements.interpolationmatrix(m1_r, intrp_brck.ξ1[el], wb)
             phis = Elements.interpolationmatrix(m1_r, intrp_brck.ξ2[el], wb)
 
             for k in 1:l3 # interpolating point-by-point
-                ξ3 = intrp_brck.ξ3[el][k]
-                interpolationmatrix_1pt(m1_r,ξ3,wb,phit)
+                interpolationmatrix_1pt(m1_r,intrp_brck.ξ3[el][k],wb,phit)
 
                 for j in 1:l2, i in 1:l1
                     vout = 0.0            
@@ -131,15 +128,14 @@ function interpolate_brick!(intrp_brck::InterpolationBrick, sv::AbstractArray{FT
                         for ij in 1:qm1
                             v_ii = 0.0
                             for ii in 1:qm1
-#                                v_ii += lag[ii,ij,ik] * phirt[ii,i]
-#                                v_ii += lag[ii + (ij-1)*qm1 + (ik-1)*qm1*qm1] * phirt[ii,i]
-                                v_ii += lag[ii + (ij-1)*qm1 + (ik-1)*qm1*qm1] * phir[i,ii]
+                                @inbounds v_ii += lag[ii + (ij-1)*qm1 + (ik-1)*qm1*qm1] * phir[i,ii]
                             end # ii loop
-                            v_ij += v_ii * phis[j,ij]
+
+                            @inbounds v_ij += v_ii * phis[j,ij]
                         end # ij loop
-                        vout += v_ij * phit[ik]
+                        @inbounds vout += v_ij * phit[ik]
                     end # ik loop
-                    intrp_brck.V[el][i + (j-1)*l1 + (k-1)*l1*l2] = vout 
+                    @inbounds intrp_brck.V[el][i + (j-1)*l1 + (k-1)*l1*l2] = vout 
                 end # j, i loop
             end # k loop
         end
@@ -184,9 +180,11 @@ end
 
     for ib in 1:qm1
         if rdst==rsrc[ib]
-            phi .= FT(0); phi[ib] = FT(1); break;
+            phi .= FT(0)
+            @inbounds phi[ib] = FT(1) 
+            break
         else
-            phi[ib] = wbsrc[ib] / (rdst-rsrc[ib])
+            @inbounds phi[ib] = wbsrc[ib] / (rdst-rsrc[ib])
         end
     end
     d = sum(phi)
@@ -419,26 +417,22 @@ function interpolate_cubed_sphere!(intrp_cs::InterpolationCubedSphere, sv::Abstr
         np = length(intrp_cs.ξ1[el])
         lag    = @view sv[:,st_no,el]
         for i in 1:np # interpolating point-by-point
-            ξ1 = intrp_cs.ξ1[el][i]
-            ξ2 = intrp_cs.ξ2[el][i]
-            ξ3 = intrp_cs.ξ3[el][i]
-
-            interpolationmatrix_1pt(m1_r,ξ1,wb,phir)
-            interpolationmatrix_1pt(m1_r,ξ2,wb,phis)
-            interpolationmatrix_1pt(m1_r,ξ3,wb,phit)
+            interpolationmatrix_1pt(m1_r,intrp_cs.ξ1[el][i],wb,phir)
+            interpolationmatrix_1pt(m1_r,intrp_cs.ξ2[el][i],wb,phis)
+            interpolationmatrix_1pt(m1_r,intrp_cs.ξ3[el][i],wb,phit)
             vout = 0.0
             for ik in 1:qm1
                 vout_ij = 0.0
                 for ij in 1:qm1 
                     vout_ii = 0.0 
                     for ii in 1:qm1
-                        vout_ii += lag[ii + (ij-1)*qm1 + (ik-1)*qm1*qm1] * phir[ii]
+                        @inbounds vout_ii += lag[ii + (ij-1)*qm1 + (ik-1)*qm1*qm1] * phir[ii]
                     end
-                    vout_ij += vout_ii * phis[ij]
+                    @inbounds vout_ij += vout_ii * phis[ij]
                 end
-                vout += vout_ij * phit[ik]
+                @inbounds vout += vout_ij * phit[ik]
             end
-            intrp_cs.V[el][i] = vout 
+            @inbounds intrp_cs.V[el][i] = vout 
         end
   #--------------------
   end

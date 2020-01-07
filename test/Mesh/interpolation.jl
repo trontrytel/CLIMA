@@ -57,7 +57,7 @@ function run_brick_interpolation_test()
  #   Ne        = (20,2,20)
     Ne        = (4,2,4)
 
-    polynomialorder = 6 #8 #4
+    polynomialorder = 8 #8 #4
     #-------------------------
     _x, _y, _z = CLIMA.Mesh.Grids.vgeoid.x1id, CLIMA.Mesh.Grids.vgeoid.x2id, CLIMA.Mesh.Grids.vgeoid.x3id
     _ρ, _ρu, _ρv, _ρw = 1, 2, 3, 4
@@ -123,38 +123,10 @@ function run_brick_interpolation_test()
 #    println("l_infinity interpolation error in each element")
 #    display(error)
     l_infinity_domain = maximum(error)
-    println("First run_brick_interpolation_test(): l_infinity interpolation error in domain")
-    display(l_infinity_domain)
+#    println("First run_brick_interpolation_test(): l_infinity interpolation error in domain")
+#    display(l_infinity_domain)
 
-
-
-    for i = 1:10
-        println("set # $i")
-        println("for loops version")
-        @time interpolate_brick!(intrp_brck, Q.data, st_no, polynomialorder)
-        println("tenspxv version")
-        @time interpolate_brick_v2!(intrp_brck, Q.data, st_no, polynomialorder)
-        println("===========================================================")
-    end
-    #------testing
-    Nel = length( grid.topology.realelems )
-
-    error = zeros(FT, Nel) 
-
-    for elno in 1:Nel
-      fex = similar(intrp_brck.V[elno])
-      fex = fcn( intrp_brck.x[elno][1,:] ./ xmax , intrp_brck.x[elno][2,:] ./ ymax , intrp_brck.x[elno][3,:] ./ zmax )
-      error[elno] = maximum(abs.(intrp_brck.V[elno][:]-fex[:]))
-    end
-
-#    println("==============================================")
-#    println("l_infinity interpolation error in each element")
-#    display(error)
-    l_infinity_domain = maximum(error)
-    println("run_brick_interpolation_test(): l_infinity interpolation error in domain")
-    display(l_infinity_domain)
-#    println("==============================================")
-    return l_infinity_domain < 1.0e-11
+    return l_infinity_domain < 1.0e-14
     #----------------
 end #function run_brick_interpolation_test
 
@@ -252,21 +224,8 @@ function run_cubed_sphere_interpolation_test()
 
     var .= fcn( x1 ./ xmax, x2 ./ ymax, x3 ./ zmax )
   #------------------------------
-#  x1_un = @view grid.topology.elemtocoord[1,:,:] # elemtocoord[x/y/z,,vert#, elem#] 
-#  x2_un = @view grid.topology.elemtocoord[2,:,:] 
-#  x3_un = @view grid.topology.elemtocoord[3,:,:]
-
-
     intrp_cs = InterpolationCubedSphere(grid, collect(vert_range), lat_res, long_res, r_res)
     interpolate_cubed_sphere!(intrp_cs, Q.data, st_no, polynomialorder)
-    #----------------------------------------------------------
-#    for i = 1:10
-#        println("set # $i")
-#        println("for loops version")
-#        @time interpolate_cubed_sphere!(intrp_cs, Q.data, st_no, polynomialorder)
-#        println("===========================================================")
-#    end
-
     #----------------------------------------------------------
 
     Nel = length( grid.topology.realelems )
@@ -293,8 +252,8 @@ function run_cubed_sphere_interpolation_test()
 #  println("l_infinity interpolation error in each element")
 #  display(error)
     l_infinity_domain = maximum(error)
-    println("run_cubed_sphere_interpolation_test(): l_infinity interpolation error in domain")
-    display(l_infinity_domain)
+#    println("run_cubed_sphere_interpolation_test(): l_infinity interpolation error in domain")
+#    display(l_infinity_domain)
 #    println("==============================================")
 #----------------------------------------------------------------------------
     return l_infinity_domain < 1.0e-12
