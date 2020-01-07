@@ -2,6 +2,9 @@ using MPI
 using CLIMA
 using Logging
 using Test
+using Unitful
+using CLIMA.UnitAnnotations
+import CLIMA.UnitAnnotations: space_unit, time_unit
 using CLIMA.Mesh.Topologies
 using CLIMA.Mesh.Grids
 using CLIMA.DGmethods
@@ -41,18 +44,18 @@ time_unit(::AdvectionDiffusion) = u"s"
 #   `coord` coordinate points (needed for BCs)
 #   `u` advection velocity
 #   `D` Diffusion tensor
-vars_aux(::AdvectionDiffusion, FT) = @vars(coord::SVector{3, units(FT, u"m")},
-                                           u::SVector{3, units(FT, u"m*s^-1")},
-                                           D::SMatrix{3, 3, units(FT, u"m^2/s"), 9})
+vars_aux(::AdvectionDiffusion, FT) = @vars(coord::SVector{3, U(FT, u"m")},
+                                           u::SVector{3, U(FT, u"m*s^-1")},
+                                           D::SMatrix{3, 3, U(FT, u"m^2/s"), 9})
 #
 # Density is only state
-vars_state(::AdvectionDiffusion, FT) = @vars(ρ::units(FT, u"kg*m^-3"))
+vars_state(::AdvectionDiffusion, FT) = @vars(ρ::U(FT, u"kg*m^-3"))
 
 # Take the gradient of density
-vars_gradient(::AdvectionDiffusion, FT) = @vars(ρ::units(FT, u"kg*m^-3"))
+vars_gradient(::AdvectionDiffusion, FT) = @vars(ρ::U(FT, u"kg*m^-3"))
 
 # The DG auxiliary variable: D ∇ρ
-vars_diffusive(::AdvectionDiffusion, FT) = @vars(σ::SVector{3, units(FT, u"kg*m^-2*s^-1")})
+vars_diffusive(::AdvectionDiffusion, FT) = @vars(σ::SVector{3, U(FT, u"kg*m^-2*s^-1")})
 
 struct Pseudo1D{n, α, β, μ, δ} <: AdvectionDiffusionProblem end
 
