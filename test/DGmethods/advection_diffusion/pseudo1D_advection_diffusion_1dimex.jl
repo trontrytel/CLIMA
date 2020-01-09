@@ -37,8 +37,8 @@ const output = parse(Bool, lowercase(get(ENV,"JULIA_CLIMA_OUTPUT","false")))
 include("advection_diffusion_model.jl")
 
 # provide default units
-space_unit(::AdvectionDiffusion) = u"m"
-time_unit(::AdvectionDiffusion) = u"s"
+space_unit(::AdvectionDiffusion) = unit_alias(:space)
+time_unit(::AdvectionDiffusion)  = unit_alias(:time) 
 
 # Stored in the aux state are:
 #   `coord` coordinate points (needed for BCs)
@@ -46,7 +46,7 @@ time_unit(::AdvectionDiffusion) = u"s"
 #   `D` Diffusion tensor
 vars_aux(::AdvectionDiffusion, FT) = @vars(coord::SVector{3, units(FT,:space)},
                                            u::SVector{3, units(FT,:velocity)},
-                                           D::SMatrix{3, 3, units(FT, u"m^2/s"), 9})
+                                           D::SMatrix{3, 3, units(FT,:kinvisc), 9})
 #
 # Density is only state
 vars_state(::AdvectionDiffusion, FT) = @vars(ρ::units(FT,:density))
@@ -244,6 +244,7 @@ let
     for FT in (Float64, Float32)
       result = zeros(FT, numlevels)
       for dim = 2:3
+<<<<<<< HEAD
         for fluxBC in (true, false)
           for linearsolvertype in (SingleColumnLU, ManyColumnLU)
             d = dim == 2 ? FT[1, 10, 0] : FT[1, 1, 10]
@@ -280,6 +281,42 @@ let
               if !(dim == 2 && l == 4 && FT == Float32)
                 @test result[l] ≈ FT(expected_result[dim, l, FT])
               end
+=======
+        for linearsolvertype in (SingleColumnLU, ManyColumnLU)
+          d = dim == 2 ? FT[1, 10, 0] : FT[1, 1, 10]
+          n = SVector{3, FT}(d ./ norm(d))
+
+          α = units(FT, :velocity)(1)
+          β = units(FT, :kinvisc)(1 // 100)
+          μ = units(FT, :space)(-1 // 2)
+          δ = units(FT, :time)(1 // 10)
+          for l = 1:numlevels
+            Ne = 2^(l-1) * base_num_elem
+            brickrange = (ntuple(j->range(FT(-1); length=Ne+1, stop=1), dim-1)...,
+                          range(FT(-5); length=5Ne+1, stop=5))
+
+            periodicity = ntuple(j->false, dim)
+            topl = StackedBrickTopology(mpicomm, brickrange;
+                                        periodicity = periodicity,
+                                        boundary = (ntuple(j->(1,1), dim-1)...,
+                                                    (3,3)))
+            dt = (value(α)/4) / (Ne * polynomialorder^2)
+
+            outputtime = 0.01
+            timeend = 0.5
+
+            @info (ArrayType, FT, dim, linearsolvertype, l)
+            vtkdir = output ? "vtk_advection" *
+                              "_poly$(polynomialorder)" *
+                              "_dim$(dim)_$(ArrayType)_$(FT)" *
+                              "_$(linearsolvertype)_level$(l)" : nothing
+            result[l] = run(mpicomm, ArrayType, dim, topl, polynomialorder,
+                            timeend, FT, dt, n, α, β, μ, δ, vtkdir,
+                            outputtime, linearsolvertype)
+            # test the errors significantly larger than floating point epsilon
+            if !(dim == 2 && l == 4 && FT == Float32)
+              @test result[l] ≈ FT(expected_result[dim, l, FT])
+>>>>>>> Removed all manual specification of units.
             end
             @info begin
               msg = ""

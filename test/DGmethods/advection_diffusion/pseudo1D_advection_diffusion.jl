@@ -28,8 +28,8 @@ const output = parse(Bool, lowercase(get(ENV,"JULIA_CLIMA_OUTPUT","false")))
 include("advection_diffusion_model.jl")
 
 # provide default units
-space_unit(::AdvectionDiffusion) = u"m"
-time_unit(::AdvectionDiffusion) = u"s"
+space_unit(::AdvectionDiffusion) = unit_alias(:space)
+time_unit(::AdvectionDiffusion)  = unit_alias(:time)
 
 # Stored in the aux state are:
 #   `coord` coordinate points (needed for BCs)
@@ -37,7 +37,7 @@ time_unit(::AdvectionDiffusion) = u"s"
 #   `D` Diffusion tensor
 vars_aux(::AdvectionDiffusion, FT) = @vars(coord::SVector{3, units(FT,:space)},
                                            u::SVector{3, units(FT,:velocity)},
-                                           D::SMatrix{3, 3, units(FT,u"m^2/s"), 9})
+                                           D::SMatrix{3, 3, units(FT,:kinvisc), 9})
 #
 # Density is only state
 vars_state(::AdvectionDiffusion, FT) = @vars(ρ::units(FT,:density))
