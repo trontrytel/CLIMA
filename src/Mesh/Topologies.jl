@@ -645,7 +645,7 @@ function CubedShellTopology(mpicomm, Neside, T; connectivity=:face,
 
   topology = cubedshellmesh(Neside, part=mpirank+1, numparts=mpisize)
 
-  topology = BrickMesh.partition(mpicomm, topology...)
+  topology = BrickMesh.partition(mpicomm, topology...)#topology(1), topology(2), topology(3), topology(4) ) #topology...)
   origsendorder = topology[5]
   dim, nvert = 3, 4
   elemtovert = topology[1]
@@ -770,7 +770,7 @@ function cubedshellmesh(Ne; part=1, numparts=1)
   # no faceconnections for a shell
   faceconnections = Array{Array{Int, 1}}(undef, 0)
 
-  (elemtovert, elemtocoord, elemtobndy, faceconnections)
+  (elemtovert, elemtocoord, elemtobndy, faceconnections, collect(elemlocal))
 end
 
 

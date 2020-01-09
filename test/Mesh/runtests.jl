@@ -11,7 +11,6 @@ include("grid_integral.jl")
 include("filter.jl")
 include("Geometry.jl")
 
-include("interpolation.jl")
 
 # runmpi won't work if we do not finalize
 # This is not so nice since other tests that are run direction and call MPI.Init
@@ -24,6 +23,7 @@ MPI.Initialized() && MPI.Finalize()
   tests = [(3, "mpi_centroid.jl")
            (5, "mpi_connect_1d.jl")
            (2, "mpi_connect_ell.jl")
+           (3, "interpolation.jl")
            (3, "mpi_connect.jl")
            (3, "mpi_connect_stacked.jl")
            (2, "mpi_connect_stacked_3d.jl")

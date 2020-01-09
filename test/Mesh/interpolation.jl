@@ -45,6 +45,7 @@ function run_brick_interpolation_test()
 #@testset "LocalGeometry" begin
     FT = Float64
     ArrayType = Array
+    mpicomm = MPI.COMM_WORLD
 
     xmin, ymin, zmin = 0, 0, 0                   # defining domain extent
     xmax, ymax, zmax = 2000, 400, 2000
@@ -94,18 +95,19 @@ function run_brick_interpolation_test()
     x2 = @view grid.vgeo[:,_y,:]
     x3 = @view grid.vgeo[:,_z,:]
  
-    st_no = _ρ # state vector
+    st_idx = _ρ # state vector
     elno = 10
 
-    var = @view Q.data[:,st_no,:]
+    var = @view Q.data[:,st_idx,:]
 
     #fcn(x,y,z) = x .* y .* z # sample function
     fcn(x,y,z) = sin.(x) .* cos.(y) .* cos.(z) # sample function
 
     var .= fcn( x1 ./ xmax, x2 ./ ymax, x3 ./ zmax )
-    #----calling interpolation function on state variable # st_no--------------------------
-    intrp_brck = InterpolationBrick(grid, xres, FT)
-    interpolate_brick!(intrp_brck, Q.data, st_no, polynomialorder)
+    #----calling interpolation function on state variable # st_idx--------------------------
+    #intrp_brck = InterpolationBrick(grid, xres, FT)
+    intrp_brck = InterpolationBrick(grid, xres)
+    interpolate_brick!(intrp_brck, Q.data, st_idx, polynomialorder)
 
 
     #------testing
@@ -122,10 +124,19 @@ function run_brick_interpolation_test()
 #    println("==============================================")
 #    println("l_infinity interpolation error in each element")
 #    display(error)
-    l_infinity_domain = maximum(error)
+    l_infinity_local = maximum(error)
+    l_infinity_domain = MPI.Allreduce(l_infinity_local, MPI.MAX, mpicomm)
 #    println("First run_brick_interpolation_test(): l_infinity interpolation error in domain")
 #    display(l_infinity_domain)
+#    pid = MPI.Comm_rank(mpicomm)
+#    npr = MPI.Comm_size(mpicomm)
 
+#    for i in 0:npr-1
+#        if i == pid
+#            println("pid = $pid; l_infinity_local = $l_infinity_local; l_infinity_domain = $l_infinity_domain")
+#        end
+#        MPI.Barrier(mpicomm)
+#    end
     return l_infinity_domain < 1.0e-14
     #----------------
 end #function run_brick_interpolation_test
@@ -154,6 +165,7 @@ function run_cubed_sphere_interpolation_test()
 
     FT = Float64
     mpicomm = MPI.COMM_WORLD
+    root = 0
 
     ll = uppercase(get(ENV, "JULIA_LOG_LEVEL", "INFO"))
     loglevel = Dict("DEBUG" => Logging.Debug,
@@ -175,12 +187,12 @@ function run_cubed_sphere_interpolation_test()
     _ρ, _ρu, _ρv, _ρw = 1, 2, 3, 4
     #-------------------------
     vert_range = grid1d(FT(planet_radius), FT(planet_radius + domain_height), nelem = numelem_vert)
+
  #   vert_range = grid1d(FT(1.0), FT(2.0), nelem = numelem_vert)
-    nvert = 4
   
     lat_res  = 5 * π / 180.0 # 5 degree resolution
     long_res = 5 * π / 180.0 # 5 degree resolution
-    r_res    = (vert_range[end] - vert_range[1])/FT(nvert) #1000.00    # 1000 m vertical resolution
+    r_res    = (vert_range[end] - vert_range[1])/FT(numelem_vert) #1000.00    # 1000 m vertical resolution
 
     #----------------------------------------------------------
     setup = TestSphereSetup{FT}()
@@ -215,17 +227,17 @@ function run_cubed_sphere_interpolation_test()
     ymax = maximum( abs.(x2) )
     zmax = maximum( abs.(x3) )
 
-    st_no = _ρ # state vector
+    st_idx = _ρ # state vector
 
-    var = @view Q.data[:,st_no,:]
+    var = @view Q.data[:,st_idx,:]
 
 #    fcn(x,y,z) = x .* y .* z # sample function
     fcn(x,y,z) = sin.(x) .* cos.(y) .* cos.(z) # sample function
 
     var .= fcn( x1 ./ xmax, x2 ./ ymax, x3 ./ zmax )
   #------------------------------
-    intrp_cs = InterpolationCubedSphere(grid, collect(vert_range), lat_res, long_res, r_res)
-    interpolate_cubed_sphere!(intrp_cs, Q.data, st_no, polynomialorder)
+    intrp_cs = InterpolationCubedSphere(grid, collect(vert_range), numelem_horz, lat_res, long_res, r_res)
+    interpolate_cubed_sphere!(intrp_cs, Q.data, st_idx, polynomialorder)
     #----------------------------------------------------------
 
     Nel = length( grid.topology.realelems )
@@ -248,10 +260,23 @@ function run_cubed_sphere_interpolation_test()
         end
     end
     #----------------------------------------------------------
+    l_infinity_local = maximum(error)
+    l_infinity_domain = MPI.Allreduce(l_infinity_local, MPI.MAX, mpicomm)
+
+#    pid = MPI.Comm_rank(mpicomm)
+#    npr = MPI.Comm_size(mpicomm)
+
+#    for i in 0:npr-1
+#        if i == pid
+#            println("pid = $pid; l_infinity_local = $l_infinity_local; l_infinity_domain = $l_infinity_domain")
+#        end
+#        MPI.Barrier(mpicomm)
+#    end
+
+
 #    println("==============================================")
 #  println("l_infinity interpolation error in each element")
 #  display(error)
-    l_infinity_domain = maximum(error)
 #    println("run_cubed_sphere_interpolation_test(): l_infinity interpolation error in domain")
 #    display(l_infinity_domain)
 #    println("==============================================")

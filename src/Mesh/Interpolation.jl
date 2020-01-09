@@ -13,7 +13,7 @@ export InterpolationBrick, interpolate_brick!, interpolate_brick_v2!, Interpolat
 
 #--------------------------------------------------------
 """
-    function InterpolationBrick(grid::DiscontinuousSpectralElementGrid, xres, ::Type{FT}) where FT <: AbstractFloat
+    InterpolationBrick(grid::DiscontinuousSpectralElementGrid, xres, ::Type{FT}) where FT <: AbstractFloat
 
 This interpolation structure and the corresponding functions works for a brick, where stretching/compression happens only along the x, y & z axis.
 Here x1 = X1(ξ1); x2 = X2(ξ2); x3 = X3(ξ3)
@@ -25,8 +25,8 @@ Here x1 = X1(ξ1); x2 = X2(ξ2); x3 = X3(ξ3)
 struct InterpolationBrick{FT <:AbstractFloat}
     realelems::UnitRange{Int64}
 
-    xbnd::Array{FT}        # domain bounds, [2(min/max),ndim]
-    xres::Array{FT}        # resolutions in x1, x2, x3 directions for the uniform grid
+    xbnd::Array{FT,2}        # domain bounds, [2(min/max),ndim]
+    xres::Array{FT,1}        # resolutions in x1, x2, x3 directions for the uniform grid
 
     ξ1::Vector{Vector{FT}} # unique ξ1 coordinates of interpolation points within each element 
     ξ2::Vector{Vector{FT}} # unique ξ2 coordinates of interpolation points within each element 
@@ -36,7 +36,7 @@ struct InterpolationBrick{FT <:AbstractFloat}
 
     V::Vector{Vector{FT}}  # interpolated variable within each element
 #--------------------------------------------------------
-    function InterpolationBrick(grid::DiscontinuousSpectralElementGrid, xres, ::Type{FT}) where FT <: AbstractFloat
+    function InterpolationBrick(grid::DiscontinuousSpectralElementGrid{FT}, xres) where FT <: AbstractFloat
         T = Int
         ndim = 3
         xbnd = zeros(FT, 2, ndim) # domain bounds (min,max) in each dimension
@@ -87,7 +87,7 @@ struct InterpolationBrick{FT <:AbstractFloat}
 end # struct InterpolationBrick 
 #--------------------------------------------------------
 """
-    function interpolate_brick!(intrp_brck::InterpolationBrick, sv::AbstractArray{FT}, st_no::T, poly_order::T) where {T <: Integer, FT <: AbstractFloat}
+    interpolate_brick!(intrp_brck::InterpolationBrick, sv::AbstractArray{FT}, st_idx::T, poly_order::T) where {T <: Integer, FT <: AbstractFloat}
 
 This interpolation function works for a brick, where stretching/compression happens only along the x, y & z axis.
 Here x1 = X1(ξ1); x2 = X2(ξ2); x3 = X3(ξ3)
@@ -95,38 +95,38 @@ Here x1 = X1(ξ1); x2 = X2(ξ2); x3 = X3(ξ3)
 # input
  - `intrp_brck` Initialized InterpolationBrick structure
  - `sv` State vector
- - `st_no` # of state vector variable to be interpolated
+ - `st_idx` # of state vector variable to be interpolated
  - `poly_order` polynomial order for the simulation
 """
-function interpolate_brick!(intrp_brck::InterpolationBrick, sv::AbstractArray{FT}, st_no::T, poly_order::T) where {T <: Integer, FT <: AbstractFloat}
+function interpolate_brick!(intrp_brck::InterpolationBrick, sv::AbstractArray{FT}, st_idx::T, poly_order::T) where {T <: Integer, FT <: AbstractFloat}
     qm1 = poly_order + 1
     Nel = length(intrp_brck.realelems)
     m1_r, m1_w = GaussQuadrature.legendre(FT,qm1,GaussQuadrature.both)
     wb = Elements.baryweights(m1_r)
 
-    vout    = 0.0
-    vout_ii = 0.0
-    vout_ij = 0.0
+    vout    = FT(0)
+    vout_ii = FT(0)
+    vout_ij = FT(0)
 
     phit = Vector{FT}(undef,qm1)
 
     for el in 1:Nel #-----for each element elno 
         if length(intrp_brck.ξ1[el]) > 0
             l1 = length(intrp_brck.ξ1[el]); l2 = length(intrp_brck.ξ2[el]); l3 = length(intrp_brck.ξ3[el]) 
-            lag    = @view sv[:,st_no,el]
+            lag    = @view sv[:,st_idx,el]
 
             phir = Elements.interpolationmatrix(m1_r, intrp_brck.ξ1[el], wb)
             phis = Elements.interpolationmatrix(m1_r, intrp_brck.ξ2[el], wb)
 
             for k in 1:l3 # interpolating point-by-point
-                interpolationmatrix_1pt(m1_r,intrp_brck.ξ3[el][k],wb,phit)
+                interpolationvector_1pt!(m1_r,intrp_brck.ξ3[el][k],wb,phit)
 
                 for j in 1:l2, i in 1:l1
-                    vout = 0.0            
+                    vout = 0            
                     for ik in 1:qm1
-                        v_ij = 0.0
+                        v_ij = 0
                         for ij in 1:qm1
-                            v_ii = 0.0
+                            v_ii = 0
                             for ii in 1:qm1
                                 @inbounds v_ii += lag[ii + (ij-1)*qm1 + (ik-1)*qm1*qm1] * phir[i,ii]
                             end # ii loop
@@ -173,7 +173,20 @@ function interpolate_brick_v2!(intrp_brck::InterpolationBrick, sv::AbstractArray
   end
 end
 #--------------------------------------------------------
-@inline function interpolationmatrix_1pt(rsrc::Vector{FT}, rdst::FT,
+"""
+    interpolationvector_1pt!(rsrc::Vector{FT}, rdst::FT,
+                             wbsrc::Vector{FT}, phi::Vector{FT}) where FT <: AbstractFloat
+
+returns the polynomial interpolation matrix for interpolating between the points
+`rsrc` (with associated barycentric weights `wbsrc`) and a single point rdst. This 
+function writes the result to a vector since the basis functions are calculated at a single point
+
+Reference:
+  Jean-Paul Berrut & Lloyd N. Trefethen, "Barycentric Lagrange Interpolation",
+  SIAM Review 46 (2004), pp. 501-517.
+  <https://doi.org/10.1137/S0036144502417715>
+"""
+@inline function interpolationvector_1pt!(rsrc::Vector{FT}, rdst::FT,
                              wbsrc::Vector{FT}, phi::Vector{FT}) where FT <: AbstractFloat
     qm1 = length(rsrc)
     @assert length(phi) == qm1
@@ -193,7 +206,7 @@ end
 end
 #--------------------------------------------------------
 """
-    function InterpolationCubedSphere(grid::DiscontinuousSpectralElementGrid, vert_range::AbstractArray{FT}, lat_res::FT, long_res::FT, rad_res::FT) where {FT <: AbstractFloat}
+    InterpolationCubedSphere(grid::DiscontinuousSpectralElementGrid, vert_range::AbstractArray{FT}, lat_res::FT, long_res::FT, rad_res::FT) where {FT <: AbstractFloat}
 
 This interpolation structure and the corresponding functions works for a cubed sphere topology. The data is interpolated along a lat/long/rad grid.
 
@@ -224,8 +237,7 @@ struct InterpolationCubedSphere{T <: Integer, FT <: AbstractFloat}
 
     V::Vector{Vector{FT}}  # interpolated variable within each element
   #--------------------------------------------------------
-    function InterpolationCubedSphere(grid::DiscontinuousSpectralElementGrid, vert_range::AbstractArray{FT}, lat_res::FT, long_res::FT, rad_res::FT) where {FT <: AbstractFloat}
-        T = Int
+    function InterpolationCubedSphere(grid::DiscontinuousSpectralElementGrid, vert_range::AbstractArray{FT}, nhor::Int, lat_res::FT, long_res::FT, rad_res::FT) where {FT <: AbstractFloat}
 
         toler1 = eps(FT) * vert_range[1] * 2.0 # tolerance for unwarp function
         #toler1 = eps(FT) * 2.0 # tolerance for unwarp function
@@ -239,29 +251,28 @@ struct InterpolationCubedSphere{T <: Integer, FT <: AbstractFloat}
         realelems = grid.topology.realelems # Element (numbers) on the local processor
         Nel = length(realelems)
 
-        Nel_glob = length(grid.topology.elems)
         nvert = length(vert_range) - 1              # # of elements in vertical direction
-        nhor  = T( sqrt( Nel_glob / nvert / 6) )  # # of elements in horizontal direction
+        Nel_glob = nvert * nhor * nhor * 6
+
         nblck = nhor * nhor * nvert
-        Δh = 2.0 / nhor                             # horizontal grid spacing in unwarped grid
+        Δh = 2 / nhor                               # horizontal grid spacing in unwarped grid
 
         lat_grd, long_grd, rad_grd = range(lat_min, lat_max, step=lat_res), range(long_min, long_max, step=long_res), range(rad_min, rad_max, step=rad_res) 
 
-        n_lat, n_long, n_rad = T(length(lat_grd)), T(length(long_grd)), T(length(rad_grd))
+        n_lat, n_long, n_rad = Int(length(lat_grd)), Int(length(long_grd)), Int(length(rad_grd))
 
         uw_grd = zeros(FT, 3, 1)
         #---------------------------------------------- 
-        flip_ord = invperm(grid.topology.origsendorder) # to account for reordering of elements after the partitioning process 
+        glob_ord = grid.topology.origsendorder # to account for reordering of elements after the partitioning process 
 
-        reorder = zeros(T, 6*nvert*nhor*nhor)
+        glob_elem_no = zeros(Int, nvert*length(glob_ord))
 
-        for i in 1:length(flip_ord), j in 1:nvert
-            reorder[j + (i-1)*nvert] = (flip_ord[i] - 1)*nvert + j
+        for i in 1:length(glob_ord), j in 1:nvert
+            glob_elem_no[j + (i-1)*nvert] = (glob_ord[i] - 1)*nvert + j 
         end
 
-        temp = invperm(grid.topology.origsendorder) 
-        ξ1, ξ2, ξ3        = map( i -> zeros(FT,i), zeros(T,Nel)), map( i -> zeros(FT,i), zeros(T,Nel)), map( i -> zeros(FT,i), zeros(T,Nel))
-        radc, latc, longc = map( i -> zeros(FT,i), zeros(T,Nel)), map( i -> zeros(FT,i), zeros(T,Nel)), map( i -> zeros(FT,i), zeros(T,Nel))
+        ξ1, ξ2, ξ3        = map( i -> zeros(FT,i), zeros(Int,Nel)), map( i -> zeros(FT,i), zeros(Int,Nel)), map( i -> zeros(FT,i), zeros(Int,Nel))
+        radc, latc, longc = map( i -> zeros(FT,i), zeros(Int,Nel)), map( i -> zeros(FT,i), zeros(Int,Nel)), map( i -> zeros(FT,i), zeros(Int,Nel))
 
         for k in 1:n_long, j in 1:n_lat, i in 1:n_rad 
             x1_grd = rad_grd[i] * sin(lat_grd[j]) * cos(long_grd[k]) # inclination -> latitude; azimuthal -> longitude.
@@ -286,32 +297,32 @@ struct InterpolationCubedSphere{T <: Integer, FT <: AbstractFloat}
             if     abs(x1_uw2_grd + 1) < toler2 # face 1 (x1 == -1 plane)
 	    	    l2 = min(div(x2_uw2_grd + 1, Δh) + 1, nhor)
     		    l3 = min(div(x3_uw2_grd + 1, Δh) + 1, nhor)
-                el_glob = reorder[T(l_nrm + (nhor-l2)*nvert + (l3-1)*nvert*nhor)] 
+                el_glob = Int(l_nrm + (nhor-l2)*nvert + (l3-1)*nvert*nhor)
             elseif abs(x2_uw2_grd + 1) < toler2 # face 2 (x2 == -1 plane)
 		        l1 = min(div(x1_uw2_grd + 1, Δh) + 1, nhor)
     		    l3 = min(div(x3_uw2_grd + 1, Δh) + 1, nhor)
-                el_glob = reorder[T(l_nrm + (l1-1)*nvert + (l3-1)*nvert*nhor + nblck*1)]
+                el_glob = Int(l_nrm + (l1-1)*nvert + (l3-1)*nvert*nhor + nblck*1)
             elseif abs(x1_uw2_grd - 1) < toler2 # face 3 (x1 == +1 plane)
 		        l2 = min(div(x2_uw2_grd + 1, Δh) + 1, nhor)
     		    l3 = min(div(x3_uw2_grd + 1, Δh) + 1, nhor)
-                el_glob = reorder[T(l_nrm + (l2-1)*nvert + (l3-1)*nvert*nhor + nblck*2 )]
+                el_glob = Int(l_nrm + (l2-1)*nvert + (l3-1)*nvert*nhor + nblck*2 )
             elseif abs(x3_uw2_grd - 1) < toler2 # face 4 (x3 == +1 plane)
       		    l1 = min(div(x1_uw2_grd + 1, Δh) + 1, nhor)
 	    	    l2 = min(div(x2_uw2_grd + 1, Δh) + 1, nhor)
-                el_glob = reorder[T(l_nrm + (l1-1)*nvert + (l2-1)*nvert*nhor + nblck*3)]
+                el_glob = Int(l_nrm + (l1-1)*nvert + (l2-1)*nvert*nhor + nblck*3)
             elseif abs(x2_uw2_grd - 1) < toler2 # face 5 (x2 == +1 plane)
 	            l1 = min(div(x1_uw2_grd + 1, Δh) + 1, nhor)
 		        l3 = min(div(x3_uw2_grd + 1, Δh) + 1, nhor)
-                el_glob = reorder[T(l_nrm + (l1-1)*nvert + (nhor-l3)*nvert*nhor + nblck*4 )]
+                el_glob = Int(l_nrm + (l1-1)*nvert + (nhor-l3)*nvert*nhor + nblck*4 )
             elseif abs(x3_uw2_grd + 1) < toler2 # face 6 (x3 == -1 plane)
 	    	    l1 = min(div(x1_uw2_grd + 1, Δh) + 1, nhor)
 		        l2 = min(div(x2_uw2_grd + 1, Δh) + 1, nhor)
-                el_glob = reorder[T(l_nrm + (l1-1)*nvert + (nhor-l2)*nvert*nhor + nblck*5)]
+                el_glob = Int(l_nrm + (l1-1)*nvert + (nhor-l2)*nvert*nhor + nblck*5)
             else
                 error("error: unwrapped grid does on lie on any of the 6 faces")
             end
             #--------------------------------
-            el_loc = findfirst(X -> X-el_glob == 0, realelems)
+            el_loc = findfirst(X -> X-el_glob == 0, glob_elem_no)
             if ( el_loc ≠ nothing ) # computing inner coordinates for local elements
                 ξ = invert_trilear_mapping_hex(grid.topology.elemtocoord[1,:,el_loc], 
                                                grid.topology.elemtocoord[2,:,el_loc], 
@@ -328,7 +339,7 @@ struct InterpolationCubedSphere{T <: Integer, FT <: AbstractFloat}
  
         V = [ Vector{FT}(undef, length(radc[el])) for el in 1:Nel ] # Allocating storage for interpolation variable
 
-        return new{T, FT}(realelems, lat_min, long_min, rad_min, lat_max, long_max, rad_max, lat_res, long_res, rad_res, 
+        return new{Int, FT}(realelems, lat_min, long_min, rad_min, lat_max, long_max, rad_max, lat_res, long_res, rad_res, 
                     n_lat, n_long, n_rad, ξ1, ξ2, ξ3, radc, latc, longc, V)
     #-----------------------------------------------------------------------------------
     end # Inner constructor function InterpolationCubedSphere
@@ -336,7 +347,7 @@ struct InterpolationCubedSphere{T <: Integer, FT <: AbstractFloat}
 end # structure InterpolationCubedSphere
 #--------------------------------------------------------
 """
-    function invert_trilear_mapping_hex(X1::Array{FT}, X2::Array{FT}, X3::Array{FT}, x::Array{FT}, tol::FT) where FT <: AbstractFloat 
+    invert_trilear_mapping_hex(X1::Array{FT}, X2::Array{FT}, X3::Array{FT}, x::Array{FT}, tol::FT) where FT <: AbstractFloat 
 
 This function computes (ξ1,ξ2,ξ3) given (x1,x2,x3) and the (8) vertex coordinates of a Hexahedron. Newton-Raphson method is used
 # input
@@ -397,6 +408,7 @@ function trilinear_map_IJac_x_vec!(ξ::Array{FT}, x1v::Array{FT}, x2v::Array{FT}
                       (1 - ξ[1]) * (1 + ξ[2]) * (+1) * vert[7] + (1 + ξ[1]) * (1 + ξ[2]) * (+1) * vert[8] )/ 8.0
     end
     LinearAlgebra.LAPACK.gesv!(Jac,v)
+
     return nothing 
 end
 #--------------------------------------------------------
@@ -409,17 +421,17 @@ function interpolate_cubed_sphere!(intrp_cs::InterpolationCubedSphere, sv::Abstr
     phis = Vector{FT}(undef,qm1)
     phit = Vector{FT}(undef,qm1)
 
-    vout    = 0.0
-    vout_ii = 0.0
-    vout_ij = 0.0
+    vout    = FT(0.0)
+    vout_ii = FT(0.0)
+    vout_ij = FT(0.0)
 
     for el in 1:Nel #-----for each element elno 
         np = length(intrp_cs.ξ1[el])
         lag    = @view sv[:,st_no,el]
         for i in 1:np # interpolating point-by-point
-            interpolationmatrix_1pt(m1_r,intrp_cs.ξ1[el][i],wb,phir)
-            interpolationmatrix_1pt(m1_r,intrp_cs.ξ2[el][i],wb,phis)
-            interpolationmatrix_1pt(m1_r,intrp_cs.ξ3[el][i],wb,phit)
+            interpolationvector_1pt!(m1_r,intrp_cs.ξ1[el][i],wb,phir)
+            interpolationvector_1pt!(m1_r,intrp_cs.ξ2[el][i],wb,phis)
+            interpolationvector_1pt!(m1_r,intrp_cs.ξ3[el][i],wb,phit)
             vout = 0.0
             for ik in 1:qm1
                 vout_ij = 0.0
