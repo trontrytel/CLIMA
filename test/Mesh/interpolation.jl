@@ -79,6 +79,7 @@ function run_brick_interpolation_test()
 					 ConstantViscosityWithDivergence(FT(0)),
                      EquilMoist(),
                      NoRadiation(),
+                     NoSubsidence{FT}(),
                      (Gravity()),
 					 NoFluxBC(),
                      Initialize_Brick_Interpolation_Test!)
@@ -210,6 +211,7 @@ function run_cubed_sphere_interpolation_test()
                        ConstantViscosityWithDivergence(FT(0)),
                        DryModel(),
                        NoRadiation(),
+                       NoSubsidence{FT}(),
                        nothing, 
                        NoFluxBC(),
                        setup)
