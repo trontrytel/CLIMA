@@ -24,20 +24,22 @@ Here x1 = X1(ξ1); x2 = X2(ξ2); x3 = X3(ξ3)
 """
 struct InterpolationBrick{FT <:AbstractFloat}
     realelems::UnitRange{Int64}
+    poly_order::Int
 
-    xbnd::Array{FT,2}        # domain bounds, [2(min/max),ndim]
-    xres::Array{FT,1}        # resolutions in x1, x2, x3 directions for the uniform grid
+    xbnd::Array{FT,2}      # domain bounds, [2(min/max),ndim]
+    xres::Array{FT,1}      # resolutions in x1, x2, x3 directions for the uniform grid
 
     ξ1::Vector{Vector{FT}} # unique ξ1 coordinates of interpolation points within each element 
     ξ2::Vector{Vector{FT}} # unique ξ2 coordinates of interpolation points within each element 
     ξ3::Vector{Vector{FT}} # unique ξ3 coordinates of interpolation points within each element 
   
-    x::Vector{Array{FT,2}}   # x[elno][3,npts] -> (x1,x2,x3) coordinates of portion of interpolation grid embedded within each element 
+    x::Vector{Array{FT,2}} # x[elno][3,npts] -> (x1,x2,x3) coordinates of portion of interpolation grid embedded within each element 
 
     V::Vector{Vector{FT}}  # interpolated variable within each element
 #--------------------------------------------------------
     function InterpolationBrick(grid::DiscontinuousSpectralElementGrid{FT}, xres) where FT <: AbstractFloat
         T = Int
+        poly_order = polynomialorder(grid)
         ndim = 3
         xbnd = zeros(FT, 2, ndim) # domain bounds (min,max) in each dimension
         for dim in 1:ndim 
@@ -81,7 +83,7 @@ struct InterpolationBrick{FT <:AbstractFloat}
             x[el] = x_el
         end # el loop
         #-----------------------------------------------------------------------------------
-        return new{FT}(realelems, xbnd, xres, ξ1, ξ2, ξ3, x, V)
+        return new{FT}(realelems, poly_order, xbnd, xres, ξ1, ξ2, ξ3, x, V)
     end
 #--------------------------------------------------------
 end # struct InterpolationBrick 
@@ -98,8 +100,8 @@ Here x1 = X1(ξ1); x2 = X2(ξ2); x3 = X3(ξ3)
  - `st_idx` # of state vector variable to be interpolated
  - `poly_order` polynomial order for the simulation
 """
-function interpolate_brick!(intrp_brck::InterpolationBrick, sv::AbstractArray{FT}, st_idx::T, poly_order::T) where {T <: Integer, FT <: AbstractFloat}
-    qm1 = poly_order + 1
+function interpolate_brick!(intrp_brck::InterpolationBrick, sv::AbstractArray{FT}, st_idx::T) where {T <: Integer, FT <: AbstractFloat}
+    qm1 = intrp_brck.poly_order + 1
     Nel = length(intrp_brck.realelems)
     m1_r, m1_w = GaussQuadrature.legendre(FT,qm1,GaussQuadrature.both)
     wb = Elements.baryweights(m1_r)
@@ -186,8 +188,8 @@ Reference:
   SIAM Review 46 (2004), pp. 501-517.
   <https://doi.org/10.1137/S0036144502417715>
 """
-@inline function interpolationvector_1pt!(rsrc::Vector{FT}, rdst::FT,
-                             wbsrc::Vector{FT}, phi::Vector{FT}) where FT <: AbstractFloat
+@inline function interpolationvector_1pt!(rsrc::AbstractVector{FT}, rdst::FT,
+                             wbsrc::AbstractVector{FT}, phi::AbstractVector{FT}) where FT <: AbstractFloat
     qm1 = length(rsrc)
     @assert length(phi) == qm1
 
@@ -220,6 +222,7 @@ This interpolation structure and the corresponding functions works for a cubed s
 struct InterpolationCubedSphere{T <: Integer, FT <: AbstractFloat}
 
     realelems::UnitRange{Int64}
+    poly_order::Int
 
     lat_min::FT;  long_min::FT;  rad_min::FT; # domain bounds, min
     lat_max::FT;  long_max::FT;  rad_max::FT; # domain bounds, max
@@ -238,7 +241,7 @@ struct InterpolationCubedSphere{T <: Integer, FT <: AbstractFloat}
     V::Vector{Vector{FT}}  # interpolated variable within each element
   #--------------------------------------------------------
     function InterpolationCubedSphere(grid::DiscontinuousSpectralElementGrid, vert_range::AbstractArray{FT}, nhor::Int, lat_res::FT, long_res::FT, rad_res::FT) where {FT <: AbstractFloat}
-
+        poly_order = polynomialorder(grid)
         toler1 = eps(FT) * vert_range[1] * 2.0 # tolerance for unwarp function
         #toler1 = eps(FT) * 2.0 # tolerance for unwarp function
         toler2 = eps(FT) * 4.0                 # tolerance 
@@ -339,7 +342,7 @@ struct InterpolationCubedSphere{T <: Integer, FT <: AbstractFloat}
  
         V = [ Vector{FT}(undef, length(radc[el])) for el in 1:Nel ] # Allocating storage for interpolation variable
 
-        return new{Int, FT}(realelems, lat_min, long_min, rad_min, lat_max, long_max, rad_max, lat_res, long_res, rad_res, 
+        return new{Int, FT}(realelems, poly_order, lat_min, long_min, rad_min, lat_max, long_max, rad_max, lat_res, long_res, rad_res, 
                     n_lat, n_long, n_rad, ξ1, ξ2, ξ3, radc, latc, longc, V)
     #-----------------------------------------------------------------------------------
     end # Inner constructor function InterpolationCubedSphere
@@ -390,7 +393,7 @@ function trilinear_map(ξ::Array{FT}, x1v::Array{FT}, x2v::Array{FT}, x3v::Array
 end
 #--------------------------------------------------------
 function trilinear_map_IJac_x_vec!(ξ::Array{FT}, x1v::Array{FT}, x2v::Array{FT}, x3v::Array{FT}, v::Array{FT}) where FT <: AbstractFloat
-    Jac = zeros(FT, 3,3)
+    Jac = MMatrix{3,3,FT,9}(undef)
     for (vert,dim) = zip((x1v,x2v,x3v),1:3)
         Jac[dim,1] = ((-1) * (1 - ξ[2]) * (1 - ξ[3]) * vert[1] + ( 1) * (1 - ξ[2]) * (1 - ξ[3]) * vert[2] +
                       (-1) * (1 + ξ[2]) * (1 - ξ[3]) * vert[3] + (+1) * (1 + ξ[2]) * (1 - ξ[3]) * vert[4] +
@@ -412,18 +415,18 @@ function trilinear_map_IJac_x_vec!(ξ::Array{FT}, x1v::Array{FT}, x2v::Array{FT}
     return nothing 
 end
 #--------------------------------------------------------
-function interpolate_cubed_sphere!(intrp_cs::InterpolationCubedSphere, sv::AbstractArray{FT}, st_no::T, poly_order::T) where {T <: Integer, FT <: AbstractFloat}
-    qm1 = poly_order + 1
+function interpolate_cubed_sphere!(intrp_cs::InterpolationCubedSphere, sv::AbstractArray{FT}, st_no::T) where {T <: Integer, FT <: AbstractFloat}
+    qm1 = intrp_cs.poly_order + 1
     Nel = length(intrp_cs.realelems)
     m1_r, m1_w = GaussQuadrature.legendre(FT,qm1,GaussQuadrature.both)
     wb = Elements.baryweights(m1_r)
-    phir = Vector{FT}(undef,qm1)
-    phis = Vector{FT}(undef,qm1)
-    phit = Vector{FT}(undef,qm1)
+    phir = MVector{qm1,FT}(undef)
+    phis = MVector{qm1,FT}(undef)
+    phit = MVector{qm1,FT}(undef)
 
-    vout    = FT(0.0)
-    vout_ii = FT(0.0)
-    vout_ij = FT(0.0)
+    vout    = FT(0)
+    vout_ii = FT(0)
+    vout_ij = FT(0)
 
     for el in 1:Nel #-----for each element elno 
         np = length(intrp_cs.ξ1[el])

@@ -107,7 +107,7 @@ function run_brick_interpolation_test()
     #----calling interpolation function on state variable # st_idx--------------------------
     #intrp_brck = InterpolationBrick(grid, xres, FT)
     intrp_brck = InterpolationBrick(grid, xres)
-    interpolate_brick!(intrp_brck, Q.data, st_idx, polynomialorder)
+    interpolate_brick!(intrp_brck, Q.data, st_idx)
 
 
     #------testing
@@ -236,8 +236,8 @@ function run_cubed_sphere_interpolation_test()
 
     var .= fcn( x1 ./ xmax, x2 ./ ymax, x3 ./ zmax )
   #------------------------------
-    intrp_cs = InterpolationCubedSphere(grid, collect(vert_range), numelem_horz, lat_res, long_res, r_res)
-    interpolate_cubed_sphere!(intrp_cs, Q.data, st_idx, polynomialorder)
+    @time intrp_cs = InterpolationCubedSphere(grid, collect(vert_range), numelem_horz, lat_res, long_res, r_res)
+    interpolate_cubed_sphere!(intrp_cs, Q.data, st_idx)
     #----------------------------------------------------------
 
     Nel = length( grid.topology.realelems )
