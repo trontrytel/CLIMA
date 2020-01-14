@@ -11,8 +11,8 @@ using StaticArrays
 
 export InterpolationBrick, interpolate_brick!, InterpolationCubedSphere, invert_trilear_mapping_hex, interpolate_cubed_sphere!
 
-#interpolate_brick_v2!
 
+#interpolate_brick_v2!
 #--------------------------------------------------------
 """
     InterpolationBrick(grid::DiscontinuousSpectralElementGrid, xres, ::Type{FT}) where FT <: AbstractFloat
@@ -52,6 +52,7 @@ struct InterpolationBrick{FT <:AbstractFloat}
         x2g = range(xbnd[1,2], xbnd[2,2], step=xres[2])
         x3g = range(xbnd[1,3], xbnd[2,3], step=xres[3]) 
         #-----------------------------------------------------------------------------------
+
         realelems = grid.topology.realelems  # Element (numbers) on the local processor
         Nel       = length(realelems)
         offset    = Vector{Int}(undef,Nel+1) # offsets for the interpolated variable
@@ -62,9 +63,11 @@ struct InterpolationBrick{FT <:AbstractFloat}
         ξ1 = map( i -> zeros(FT,i), zeros(T,Nel))
         ξ2 = map( i -> zeros(FT,i), zeros(T,Nel))
         ξ3 = map( i -> zeros(FT,i), zeros(T,Nel))
+
         x  = map( i -> zeros(FT,ndim,i), zeros(T,Nel)) # interpolation grid points embedded in each cell 
 
         offset[1] = 0
+
         #-----------------------------------------------------------------------------------
         for el in 1:Nel
             for (ξ,xg,dim) in zip((ξ1,ξ2,ξ3), (x1g, x2g, x3g), 1:ndim)
@@ -74,8 +77,10 @@ struct InterpolationBrick{FT <:AbstractFloat}
                 ξ[el] = [ 2 * ( xg[ xsten[1,dim] + i - 1] - xbndl[1,dim] ) / (xbndl[2,dim]-xbndl[1,dim]) -  1 for i in 1:n123[dim] ]
             end
 
+
             x_el         = zeros(FT,ndim,prod(n123))
             offset[el+1] = offset[el] + prod(n123) 
+
 
             ctr = 1
 
@@ -88,8 +93,10 @@ struct InterpolationBrick{FT <:AbstractFloat}
             x[el] = x_el
         end # el loop
         #-----------------------------------------------------------------------------------
+
         v = Array{FT}(undef,offset[end])
         return new{FT}(realelems, poly_order, xbnd, xres, ξ1, ξ2, ξ3, x, v, offset)
+
     end
 #--------------------------------------------------------
 end # struct InterpolationBrick 
@@ -110,8 +117,8 @@ function interpolate_brick!(intrp_brck::InterpolationBrick, sv::AbstractArray{FT
     qm1 = intrp_brck.poly_order + 1
     Nel = length(intrp_brck.realelems)
     m1_r, m1_w = GaussQuadrature.legendre(FT,qm1,GaussQuadrature.both)
-    wb = Elements.baryweights(m1_r)
-   
+    wb = Elements.baryweights(m1_r)   
+
     vout    = FT(0)
     vout_ii = FT(0)
     vout_ij = FT(0)
@@ -123,6 +130,7 @@ function interpolate_brick!(intrp_brck::InterpolationBrick, sv::AbstractArray{FT
             l1 = length(intrp_brck.ξ1[el]); l2 = length(intrp_brck.ξ2[el]); l3 = length(intrp_brck.ξ3[el]) 
             lag    = @view sv[:,st_idx,el]
             offset = intrp_brck.offset[el]
+
 
             phir = Elements.interpolationmatrix(m1_r, intrp_brck.ξ1[el], wb)
             phis = Elements.interpolationmatrix(m1_r, intrp_brck.ξ2[el], wb)
@@ -153,6 +161,7 @@ function interpolate_brick!(intrp_brck::InterpolationBrick, sv::AbstractArray{FT
 end
 #--------------------------------------------------------
 #=function interpolate_brick_v2!(intrp_brck::InterpolationBrick, sv::AbstractArray{FT}, st_no::T, poly_order::T) where {T <: Integer, FT <: AbstractFloat}
+
     qm1 = poly_order + 1
     Nel = length(intrp_brck.realelems)
     m1_r, m1_w = GaussQuadrature.legendre(FT,qm1,GaussQuadrature.both)
@@ -181,6 +190,7 @@ end
   #--------------------
   end
 end=#
+
 #--------------------------------------------------------
 """
     interpolationvector_1pt!(rsrc::Vector{FT}, rdst::FT,
@@ -245,15 +255,15 @@ struct InterpolationCubedSphere{T <: Integer, FT <: AbstractFloat}
     latc::Vector{Vector{FT}}  # lat coordinates of interpolation points within each element
     longc::Vector{Vector{FT}} # long coordinates of interpolation points within each element
 
+
     v::AbstractArray{FT,1} # interpolated variable within each element
     offset::Vector{Int}    # offsets for each element for v 
   #--------------------------------------------------------
     function InterpolationCubedSphere(grid::DiscontinuousSpectralElementGrid, vert_range::AbstractArray{FT}, nhor::Int, lat_res::FT, long_res::FT, rad_res::FT) where {FT <: AbstractFloat}
         poly_order = polynomialorder(grid)
-        toler1 = eps(FT) * vert_range[1] * 2.0 # tolerance for unwarp function
-        #toler1 = eps(FT) * 2.0 # tolerance for unwarp function
-        toler2 = eps(FT) * 4.0                 # tolerance 
-        toler3 = eps(FT) * vert_range[1] * 4.0 # tolerance for Newton-Raphson 
+        toler1 = FT(eps(FT) * vert_range[1] * 2.0) # tolerance for unwarp function
+        toler2 = FT(eps(FT) * 4.0)                 # tolerance 
+        toler3 = FT(eps(FT) * vert_range[1] * 4.0) # tolerance for Newton-Raphson 
 
         lat_min,   lat_max = FT(0.0), FT(π)                 # inclination/zeinth angle range
         long_min, long_max = FT(0.0), FT(2*π)  			    # azimuthal angle range
@@ -284,8 +294,10 @@ struct InterpolationCubedSphere{T <: Integer, FT <: AbstractFloat}
 
         ξ1, ξ2, ξ3        = map( i -> zeros(FT,i), zeros(Int,Nel)), map( i -> zeros(FT,i), zeros(Int,Nel)), map( i -> zeros(FT,i), zeros(Int,Nel))
         radc, latc, longc = map( i -> zeros(FT,i), zeros(Int,Nel)), map( i -> zeros(FT,i), zeros(Int,Nel)), map( i -> zeros(FT,i), zeros(Int,Nel))
+
         offset = Vector{Int}(undef,Nel+1)
         offset[1] = 0
+
 
         for k in 1:n_long, j in 1:n_lat, i in 1:n_rad 
             x1_grd = rad_grd[i] * sin(lat_grd[j]) * cos(long_grd[k]) # inclination -> latitude; azimuthal -> longitude.
@@ -356,6 +368,7 @@ struct InterpolationCubedSphere{T <: Integer, FT <: AbstractFloat}
 
         return new{Int, FT}(realelems, poly_order, lat_min, long_min, rad_min, lat_max, long_max, rad_max, lat_res, long_res, rad_res, 
                     n_lat, n_long, n_rad, ξ1, ξ2, ξ3, radc, latc, longc, v, offset)
+
     #-----------------------------------------------------------------------------------
     end # Inner constructor function InterpolationCubedSphere
 #-----------------------------------------------------------------------------------
@@ -444,6 +457,7 @@ function interpolate_cubed_sphere!(intrp_cs::InterpolationCubedSphere, sv::Abstr
         np = length(intrp_cs.ξ1[el])
         lag    = @view sv[:,st_no,el]
         offset = intrp_cs.offset[el]
+
         for i in 1:np # interpolating point-by-point
             interpolationvector_1pt!(m1_r,intrp_cs.ξ1[el][i],wb,phir)
             interpolationvector_1pt!(m1_r,intrp_cs.ξ2[el][i],wb,phis)
@@ -461,6 +475,7 @@ function interpolate_cubed_sphere!(intrp_cs::InterpolationCubedSphere, sv::Abstr
                 @inbounds vout += vout_ij * phit[ik]
             end
             @inbounds intrp_cs.v[offset + i] = vout 
+
         end
   #--------------------
   end

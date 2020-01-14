@@ -44,7 +44,7 @@ function run_brick_interpolation_test()
 
 #@testset "LocalGeometry" begin
     FT = Float64
-    ArrayType = Array
+#    ArrayType = ArrayType #Array
     mpicomm = MPI.COMM_WORLD
 
     xmin, ymin, zmin = 0, 0, 0                   # defining domain extent
@@ -139,6 +139,7 @@ function run_brick_interpolation_test()
 #        end
 #        MPI.Barrier(mpicomm)
 #    end
+
     return l_infinity_domain < 1.0e-14
     #----------------
 end #function run_brick_interpolation_test
@@ -165,7 +166,7 @@ end
 function run_cubed_sphere_interpolation_test()
     CLIMA.init()
 
-    FT = Float64
+    FT = Float32 #Float64
     mpicomm = MPI.COMM_WORLD
     root = 0
 
@@ -192,9 +193,9 @@ function run_cubed_sphere_interpolation_test()
 
  #   vert_range = grid1d(FT(1.0), FT(2.0), nelem = numelem_vert)
   
-    lat_res  = 5 * π / 180.0 # 5 degree resolution
-    long_res = 5 * π / 180.0 # 5 degree resolution
-    r_res    = (vert_range[end] - vert_range[1])/FT(numelem_vert) #1000.00    # 1000 m vertical resolution
+    lat_res  = FT( 5 * π / 180.0) # 5 degree resolution
+    long_res = FT( 5 * π / 180.0) # 5 degree resolution
+    r_res    = FT((vert_range[end] - vert_range[1])/FT(numelem_vert)) #1000.00    # 1000 m vertical resolution
 
     #----------------------------------------------------------
     setup = TestSphereSetup{FT}()
@@ -240,6 +241,7 @@ function run_cubed_sphere_interpolation_test()
     var .= fcn( x1 ./ xmax, x2 ./ ymax, x3 ./ zmax )
   #------------------------------
     intrp_cs = InterpolationCubedSphere(grid, collect(vert_range), numelem_horz, lat_res, long_res, r_res)
+
     interpolate_cubed_sphere!(intrp_cs, Q.data, st_idx)
     #----------------------------------------------------------
 
@@ -251,6 +253,7 @@ function run_cubed_sphere_interpolation_test()
         st  = intrp_cs.offset[elno] + 1
         en  = intrp_cs.offset[elno+1]
         if en ≥ st 
+
             x1_grd = intrp_cs.radc[elno] .* sin.(intrp_cs.latc[elno]) .* cos.(intrp_cs.longc[elno]) # inclination -> latitude; azimuthal -> longitude.
             x2_grd = intrp_cs.radc[elno] .* sin.(intrp_cs.latc[elno]) .* sin.(intrp_cs.longc[elno]) # inclination -> latitude; azimuthal -> longitude.
             x3_grd = intrp_cs.radc[elno] .* cos.(intrp_cs.latc[elno])
@@ -280,8 +283,9 @@ function run_cubed_sphere_interpolation_test()
 #    println("run_cubed_sphere_interpolation_test(): l_infinity interpolation error in domain")
 #    display(l_infinity_domain)
 #    println("==============================================")
+
 #----------------------------------------------------------------------------
-    return l_infinity_domain < 1.0e-12
+    return l_infinity_domain < 1.0e-6 # 1.0e-12
 end 
 #----------------------------------------------------------------------------
 function (setup::TestSphereSetup)(state, aux, coords, t) 
