@@ -117,9 +117,10 @@ function run_brick_interpolation_test()
     error = zeros(FT, Nel) 
 
     for elno in 1:Nel
-      fex = similar(intrp_brck.V[elno])
+      st  = intrp_brck.offset[elno] + 1
+      en  = intrp_brck.offset[elno+1]
       fex = fcn( intrp_brck.x[elno][1,:] ./ xmax , intrp_brck.x[elno][2,:] ./ ymax , intrp_brck.x[elno][3,:] ./ zmax )
-      error[elno] = maximum(abs.(intrp_brck.V[elno][:]-fex[:]))
+      error[elno] = maximum(abs.(intrp_brck.v[st:en]-fex[:]))
     end
 
 #    println("==============================================")
@@ -238,7 +239,7 @@ function run_cubed_sphere_interpolation_test()
 
     var .= fcn( x1 ./ xmax, x2 ./ ymax, x3 ./ zmax )
   #------------------------------
-    @time intrp_cs = InterpolationCubedSphere(grid, collect(vert_range), numelem_horz, lat_res, long_res, r_res)
+    intrp_cs = InterpolationCubedSphere(grid, collect(vert_range), numelem_horz, lat_res, long_res, r_res)
     interpolate_cubed_sphere!(intrp_cs, Q.data, st_idx)
     #----------------------------------------------------------
 
@@ -247,18 +248,15 @@ function run_cubed_sphere_interpolation_test()
     error = zeros(FT, Nel) 
 
     for elno in 1:Nel
-        if ( length(intrp_cs.V[elno]) > 0 )
-            fex = similar(intrp_cs.V[elno])
-            x1g = similar(intrp_cs.V[elno])
-            x2g = similar(intrp_cs.V[elno])
-            x3g = similar(intrp_cs.V[elno])
-
+        st  = intrp_cs.offset[elno] + 1
+        en  = intrp_cs.offset[elno+1]
+        if en ≥ st 
             x1_grd = intrp_cs.radc[elno] .* sin.(intrp_cs.latc[elno]) .* cos.(intrp_cs.longc[elno]) # inclination -> latitude; azimuthal -> longitude.
             x2_grd = intrp_cs.radc[elno] .* sin.(intrp_cs.latc[elno]) .* sin.(intrp_cs.longc[elno]) # inclination -> latitude; azimuthal -> longitude.
             x3_grd = intrp_cs.radc[elno] .* cos.(intrp_cs.latc[elno])
         
             fex = fcn( x1_grd ./ xmax , x2_grd ./ ymax , x3_grd ./ zmax )
-            error[elno] = maximum(abs.(intrp_cs.V[elno][:]-fex[:]))
+            error[elno] = maximum(abs.(intrp_cs.v[st:en]-fex[:]))
         end
     end
     #----------------------------------------------------------
