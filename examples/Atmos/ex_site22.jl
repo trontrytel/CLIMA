@@ -87,6 +87,32 @@ DOI = {10.5194/gmd-10-359-2017}
 
 initdata = get_ncdata()
 
+function Initialise_Site22!(state::Vars, aux::Vars, (x1,x2,x3), t, 
+                            (spl_pfull, 
+                            spl_temp,
+                            spl_ucomp,
+                            spl_vcomp,
+                            spl_sphum))
+  
+  FT = eltype(state)
+  T     = spl_temp(x3)
+  q_tot = spl_sphum(x3)
+  u     = spl_ucomp(x3)
+  v     = spl_vcomp(x3)
+  P     = spl_pfull(x3)
+
+  ρ     = air_density(T,P,PhasePartition(q_tot))
+  e_int = internal_energy(T,PhasePartition(q_tot))
+  e_kin = (u^2 + v^2)/2  
+  e_pot = grav * x3 
+  
+  state.ρ = ρ
+  state.ρu = ρ * SVector(u,v,0)
+  state.ρe = ρ * (e_kin + e_pot + e_int)
+  state.moisture.ρq_tot = ρ * q_tot
+
+end
+
 # --------------- Driver definition ------------------ #
 function run(mpicomm,
              topl, dim, Ne, polynomialorder,
@@ -98,55 +124,21 @@ function run(mpicomm,
                                           polynomialorder = polynomialorder
                                            )
   # -------------- Define model ---------------------------------- #
-  function Initialise_Site22!(state::Vars, aux::Vars, (x1,x2,x3), t,
-                              spl_pfull,
-                              spl_temp,
-                              spl_ucomp, 
-                              spl_vcomp,
-                              spl_sphum)
-    
-    FT = eltype(state)
-    
-    T     = FT(spl_temp(x3))
-    q_tot = FT(spl_sphum(x3))
-    u     = FT(spl_ucomp(x3))
-    v     = FT(spl_vcomp(x3))
-    P     = FT(spl_pfull(x3))
-    ρ     = air_density(T,P,PhasePartition(q_tot))
-    e_int = internal_energy(T,PhasePartition(q_tot))
-    e_kin = (u^2 + v^2)/2  
-    e_pot = grav * x3 
-    
-    state.ρ = ρ
-    state.ρu = ρ * SVector(u,v,0)
-    state.ρe = ρ * (e_kin + e_pot + e_int)
-    state.moisture.ρq_tot = ρ * q_tot
-
+  function spline_int(data)
+    z         = data[:, 1];
+    pfull     = data[:, 2];
+    temp      = data[:, 3];
+    ucomp     = data[:, 4];
+    vcomp     = data[:, 5];
+    sphum     = data[:, 6];
+    spl_pfull = Spline1D(z, pfull;k=1)
+    spl_temp  = Spline1D(z, temp;k=1)
+    spl_ucomp = Spline1D(z, ucomp;k=1)
+    spl_vcomp = Spline1D(z, vcomp;k=1)
+    spl_sphum = Spline1D(z, sphum;k=1)
+    return (spl_pfull, spl_temp, spl_ucomp, spl_vcomp, spl_sphum)
   end
-
-  # Get NetCDF data for site 22 and load into initial condition prescription
-  initdata = get_ncdata()
-
-  z         = initdata[:, 1];
-  pfull     = initdata[:, 2];
-  temp      = initdata[:, 3];
-  ucomp     = initdata[:, 4];
-  vcomp     = initdata[:, 5];
-  sphum     = initdata[:, 6];
   
-  spl_pfull = Spline1D(z, pfull;k=1)
-  spl_temp  = Spline1D(z, temp;k=1)
-  spl_ucomp = Spline1D(z, ucomp;k=1)
-  spl_vcomp = Spline1D(z, vcomp;k=1)
-  spl_sphum = Spline1D(z, sphum;k=1)
-  
-  Initialise_Site22!(state, aux,(x1,x2,x3),t...) = Initialise_Site22!(state::Vars, aux::Vars, (x1,x2,x3), t,
-                                                                                 spl_pfull,
-                                                                                 spl_temp,
-                                                                                 spl_ucomp, 
-                                                                                 spl_vcomp,
-                                                                                 spl_sphum)
-
   model = AtmosModel(FlatOrientation(),
                      NoReferenceState(),
                      SmagorinskyLilly{FT}(0.23),
@@ -165,7 +157,10 @@ function run(mpicomm,
                CentralGradPenalty())
 
 
-  Q = init_ode_state(dg, FT(0); forcecpu=true)
+  # Get NetCDF data for site 22 and load into initial condition prescription
+  initdata = get_ncdata()
+  
+  Q = init_ode_state(dg, FT(0), spline_int(initdata); forcecpu=true)
 
   lsrk = LSRK54CarpenterKennedy(dg, Q; dt = dt, t0 = 0)
 

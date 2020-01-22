@@ -1,6 +1,6 @@
 using CLIMA
 using CLIMA.Mesh.Topologies: StackedCubedSphereTopology, cubedshellwarp, grid1d
-using CLIMA.Mesh.Grids
+using CLIMA.Mesh.Grids: DiscontinuousSpectralElementGrid
 using CLIMA.Mesh.Filters
 using CLIMA.DGmethods: DGModel, init_ode_state
 using CLIMA.DGmethods.NumericalFluxes: Rusanov, CentralGradPenalty,
@@ -13,7 +13,7 @@ using CLIMA.MPIStateArrays: euclidean_distance
 using CLIMA.PlanetParameters: R_d, grav, MSLP, planet_radius, cp_d, cv_d, day
 using CLIMA.MoistThermodynamics: air_density, total_energy, soundspeed_air, internal_energy, air_temperature
 using CLIMA.Atmos: AtmosModel, SphericalOrientation, NoReferenceState,
-                   DryModel, NoRadiation, NoSubsidence, NoFluxBC,
+                   DryModel, NoRadiation, NoFluxBC,
                    ConstantViscosityWithDivergence,
                    vars_state, vars_aux,
                    Gravity, Coriolis,
@@ -70,7 +70,6 @@ function run(mpicomm, polynomialorder, numelem_horz, numelem_vert,
                      ConstantViscosityWithDivergence(FT(0)),
                      DryModel(),
                      NoRadiation(),
-                     NoSubsidence{FT}(),
                      (Gravity(), Coriolis(), held_suarez_forcing!), 
                      NoFluxBC(),
                      setup)
@@ -81,8 +80,8 @@ function run(mpicomm, polynomialorder, numelem_horz, numelem_vert,
   # determine the time step
   element_size = (setup.domain_height / numelem_vert)
   acoustic_speed = soundspeed_air(FT(315))
-  lucas_magic_factor = 5
-  dt = lucas_magic_factor * min_node_distance(grid) / acoustic_speed
+  lucas_magic_factor = 14
+  dt = lucas_magic_factor * element_size / acoustic_speed / polynomialorder ^ 2
 
   Q = init_ode_state(dg, FT(0))
   lsrk = LSRK144NiegemannDiehlBusch(dg, Q; dt = dt, t0 = 0)
