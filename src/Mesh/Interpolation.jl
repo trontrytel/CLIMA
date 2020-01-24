@@ -1,5 +1,5 @@
 module Interpolation
-
+using CLIMA
 using MPI
 import GaussQuadrature
 using CLIMA.Mesh.Topologies
@@ -9,7 +9,20 @@ using CLIMA.Mesh.Elements
 using LinearAlgebra
 using StaticArrays
 
-export InterpolationBrick, interpolate_brick!, InterpolationCubedSphere, invert_trilear_mapping_hex, interpolate_cubed_sphere!
+#-------------------
+#using Requires
+#@init @require CUDAnative = "be33ccc6-a3ff-5ff2-a52e-74243cff1e17" begin
+# using .CUDAnative
+#end
+
+using CUDAdrv
+using CUDAnative
+using CuArrays
+using CUDAapi
+#-------------------
+using GPUifyLoops
+
+export InterpolationBrick, interpolate_brick!, InterpolationCubedSphere, invert_trilear_mapping_hex, interpolate_cubed_sphere!, interpolate_cubed_sphere_CUDA!
 
 
 #interpolate_brick_v2!
@@ -31,19 +44,43 @@ struct InterpolationBrick{FT <:AbstractFloat}
     xbnd::Array{FT,2}      # domain bounds, [2(min/max),ndim]
     xres::Array{FT,1}      # resolutions in x1, x2, x3 directions for the uniform grid
 
-    ξ1::Vector{Vector{FT}} # unique ξ1 coordinates of interpolation points within each element 
-    ξ2::Vector{Vector{FT}} # unique ξ2 coordinates of interpolation points within each element 
-    ξ3::Vector{Vector{FT}} # unique ξ3 coordinates of interpolation points within each element 
+    #ξ1::Vector{Vector{FT}} # unique ξ1 coordinates of interpolation points within each element 
+    #ξ2::Vector{Vector{FT}} # unique ξ2 coordinates of interpolation points within each element 
+    #ξ3::Vector{Vector{FT}} # unique ξ3 coordinates of interpolation points within each element 
+
+    ξ1::AbstractVector{FT} # unique ξ1 coordinates of interpolation points within each element 
+    ξ2::AbstractVector{FT} # unique ξ2 coordinates of interpolation points within each element 
+    ξ3::AbstractVector{FT} # unique ξ3 coordinates of interpolation points within each element 
+
+    o1::AbstractVector{Int} # offsets for each element for ξ1
+    o2::AbstractVector{Int}
+    o3::AbstractVector{Int}
+
+    flg1::AbstractVector{Int} # flags for ξ1
+    flg2::AbstractVector{Int}
+    flg3::AbstractVector{Int}
+
+    fac1::AbstractVector{FT} # factor for ξ1 
+    fac2::AbstractVector{FT}
+    fac3::AbstractVector{FT}
   
     x::Vector{Array{FT,2}} # x[elno][3,npts] -> (x1,x2,x3) coordinates of portion of interpolation grid embedded within each element 
 
     v::AbstractArray{FT,1} # interpolated variable within each element
-    offset::Vector{Int}    # offsets for each element for v
+    offset::AbstractVector{Int}    # offsets for each element for v
+
+    m1_r::AbstractVector{FT}   # GLL points
+    m1_w::AbstractVector{FT}   # GLL weights
+    wb::AbstractVector{FT}     # Barycentric weights
+
 #--------------------------------------------------------
     function InterpolationBrick(grid::DiscontinuousSpectralElementGrid{FT}, xres) where FT <: AbstractFloat
+		DA = CLIMA.array_type()                    # device array
         T = Int
         poly_order = polynomialorder(grid)
+        qm1 = poly_order + 1
         ndim = 3
+        toler = FT(eps(FT) * 4.0)                 # tolerance 
         xbnd = zeros(FT, 2, ndim) # domain bounds (min,max) in each dimension
         for dim in 1:ndim 
             xbnd[1,dim], xbnd[2,dim] = extrema(grid.topology.elemtocoord[dim,:,:])
@@ -52,13 +89,15 @@ struct InterpolationBrick{FT <:AbstractFloat}
         x2g = range(xbnd[1,2], xbnd[2,2], step=xres[2])
         x3g = range(xbnd[1,3], xbnd[2,3], step=xres[3]) 
         #-----------------------------------------------------------------------------------
-
         realelems = grid.topology.realelems  # Element (numbers) on the local processor
         Nel       = length(realelems)
         offset    = Vector{Int}(undef,Nel+1) # offsets for the interpolated variable
+        o1_d      = Vector{Int}(undef,Nel+1) # offsets for ξ1
+        o2_d      = Vector{Int}(undef,Nel+1) # offsets for ξ2
+        o3_d      = Vector{Int}(undef,Nel+1) # offsets for ξ3
         n123      = zeros(T,    ndim)        # # of unique ξ1, ξ2, ξ3 points in each cell
         xsten     = zeros(T, 2, ndim)        # x1, x2, x3 start and end for each brick element
-        xbndl     = zeros(T, 2, ndim)        # location of x1,x2,x3 limits (min,max) for each brick element
+        xbndl     = zeros(FT,2, ndim)        # x1,x2,x3 limits (min,max) for each brick element
 
         ξ1 = map( i -> zeros(FT,i), zeros(T,Nel))
         ξ2 = map( i -> zeros(FT,i), zeros(T,Nel))
@@ -66,21 +105,27 @@ struct InterpolationBrick{FT <:AbstractFloat}
 
         x  = map( i -> zeros(FT,ndim,i), zeros(T,Nel)) # interpolation grid points embedded in each cell 
 
-        offset[1] = 0
+        offset[1] = 0; o1_d[1] = 0; o2_d[1] = 0; o3_d[1] = 0;
 
         #-----------------------------------------------------------------------------------
         for el in 1:Nel
-            for (ξ,xg,dim) in zip((ξ1,ξ2,ξ3), (x1g, x2g, x3g), 1:ndim)
+            for (ξ,xg,dim,offv) in zip((ξ1,ξ2,ξ3), (x1g, x2g, x3g), 1:ndim,(o1_d,o2_d,o3_d))
                 xbndl[1,dim], xbndl[2,dim] = extrema(grid.topology.elemtocoord[dim,:,el])
-                xsten[1,dim], xsten[2,dim] = findfirst( temp -> temp ≥ xbndl[1,dim], xg ), findlast( temp -> temp ≤ xbndl[2,dim], xg )
-                n123[dim] = xsten[2,dim] - xsten[1,dim]
-                ξ[el] = [ 2 * ( xg[ xsten[1,dim] + i - 1] - xbndl[1,dim] ) / (xbndl[2,dim]-xbndl[1,dim]) -  1 for i in 1:n123[dim] ]
-            end
 
+                
+                st = findfirst( map( (av,bv) -> av && bv, (xg .≥ xbndl[1,dim]), (xg .≤ xbndl[2,dim])) )
+           
+                if st ≠ nothing
+                    xsten[1,dim] = st
+                    xsten[2,dim] = findlast( temp -> temp ≤ xbndl[2,dim], xg )
+                    n123[dim] = xsten[2,dim] - xsten[1,dim] + 1
+                end
+                ξ[el] = [ 2 * ( xg[ xsten[1,dim] + i - 1] - xbndl[1,dim] ) / (xbndl[2,dim]-xbndl[1,dim]) -  1 for i in 1:n123[dim] ]
+                offv[el+1]= offv[el] + n123[dim]
+            end
 
             x_el         = zeros(FT,ndim,prod(n123))
             offset[el+1] = offset[el] + prod(n123) 
-
 
             ctr = 1
 
@@ -93,9 +138,50 @@ struct InterpolationBrick{FT <:AbstractFloat}
             x[el] = x_el
         end # el loop
         #-----------------------------------------------------------------------------------
+        m1_r, m1_w = GaussQuadrature.legendre(FT,qm1,GaussQuadrature.both)
+        wb = Elements.baryweights(m1_r)
 
-        v = Array{FT}(undef,offset[end])
-        return new{FT}(realelems, poly_order, xbnd, xres, ξ1, ξ2, ξ3, x, v, offset)
+        ξ1_d   = Array{FT}(undef,o1_d[end]); ξ2_d   = Array{FT}(undef,o2_d[end]); ξ3_d   = Array{FT}(undef,o3_d[end])
+        fac1_d = zeros(FT,o1_d[end]); fac2_d = zeros(FT,o2_d[end]); fac3_d = zeros(FT,o3_d[end])
+        flg1_d = zeros(T,o1_d[end]);  flg2_d = zeros(T,o2_d[end]);  flg3_d = zeros(T,o3_d[end])
+
+        for i in 1:Nel
+            ctr = 1
+            for j in o1_d[i]+1:o1_d[i+1]
+                ξ1_d[j] = ξ1[i][ctr]
+                l1 = findfirst(X -> abs.(X.-ξ1_d[j]) < toler, m1_r)
+                l1 == nothing ? [ fac1_d[j] +=  wb[ib] / (ξ1_d[j]-m1_r[ib]) for ib in 1:qm1 ] : (flg1_d[j] = l1; fac1_d[j] = FT(1);)
+                fac1_d[j] = FT(1)/fac1_d[j]
+                ctr += 1
+            end
+
+            ctr = 1
+            for j in o2_d[i]+1:o2_d[i+1]
+                ξ2_d[j] = ξ2[i][ctr]
+                l2 = findfirst(X -> abs.(X.-ξ2_d[j]) < toler, m1_r)
+                l2 == nothing ? [ fac2_d[j] +=  wb[ib] / (ξ2_d[j]-m1_r[ib]) for ib in 1:qm1 ] : (flg2_d[j] = l2; fac2_d[j] = FT(1);)
+                fac2_d[j] = FT(1)/fac2_d[j]
+                ctr += 1
+            end
+
+            ctr = 1
+            for j in o3_d[i]+1:o3_d[i+1]
+                ξ3_d[j] = ξ3[i][ctr]
+                l3 = findfirst(X -> abs.(X.-ξ3_d[j]) < toler, m1_r)
+                l3 == nothing ? [ fac3_d[j] +=  wb[ib] / (ξ3_d[j]-m1_r[ib]) for ib in 1:qm1 ] : (flg3_d[j] = l3; fac3_d[j] = FT(1);)
+                fac3_d[j] = FT(1)/fac3_d[j]
+                ctr += 1
+            end
+
+        end
+
+        ξ1_d   = DA(ξ1_d);   ξ2_d   = DA(ξ2_d);   ξ3_d   = DA(ξ3_d)
+        o1_d   = DA(o1_d);   o2_d   = DA(o2_d);   o3_d   = DA(o3_d)
+        flg1_d = DA(flg1_d); flg2_d = DA(flg2_d); flg3_d = DA(flg3_d)
+        fac1_d = DA(fac1_d); fac2_d = DA(fac2_d); fac3_d = DA(fac3_d)
+        m1_r   = DA(m1_r);   m1_w   = DA(m1_w);   wb     = DA(wb); offset = DA(offset)
+        v = DA( Array{FT}(undef,offset[end]) )
+        return new{FT}(realelems, poly_order, xbnd, xres, ξ1_d, ξ2_d, ξ3_d, o1_d, o2_d, o3_d, flg1_d, flg2_d, flg3_d, fac1_d, fac2_d, fac3_d, x, v, offset, m1_r, m1_w, wb)
 
     end
 #--------------------------------------------------------
@@ -113,84 +199,160 @@ Here x1 = X1(ξ1); x2 = X2(ξ2); x3 = X3(ξ3)
  - `st_idx` # of state vector variable to be interpolated
  - `poly_order` polynomial order for the simulation
 """
-function interpolate_brick!(intrp_brck::InterpolationBrick, sv::AbstractArray{FT}, st_idx::T) where {T <: Integer, FT <: AbstractFloat}
-    qm1 = intrp_brck.poly_order + 1
-    Nel = length(intrp_brck.realelems)
-    m1_r, m1_w = GaussQuadrature.legendre(FT,qm1,GaussQuadrature.both)
-    wb = Elements.baryweights(m1_r)   
+function interpolate_brick!(offset::AbstractArray{T,1},  m1_r::AbstractArray{FT,1},   wb::AbstractArray{FT,1}, 
+                                ξ1::AbstractArray{FT,1},   ξ2::AbstractArray{FT,1},   ξ3::AbstractArray{FT,1}, 
+                                o1::AbstractArray{T,1},    o2::AbstractArray{T,1},    o3::AbstractArray{T,1}, 
+                              flg1::AbstractArray{T,1},  flg2::AbstractArray{T,1},  flg3::AbstractArray{T,1}, 
+                              fac1::AbstractArray{FT,1}, fac2::AbstractArray{FT,1}, fac3::AbstractArray{FT,1}, 
+                                 v::AbstractArray{FT,1},   sv::AbstractArray{FT}, st_idx::T) where {T <: Int, FT <: AbstractFloat}
+    DA  = CLIMA.array_type()                    # device array
+    qm1 = length(m1_r)
+    Nel = length(offset) - 1
+    
+    device = typeof(sv) <: Array ? CPU() : CUDA()
+    println("device = $device")
 
-    vout    = FT(0)
-    vout_ii = FT(0)
-    vout_ij = FT(0)
+    if device==CPU()
+    	vout    = FT(0)
+	    vout_ii = FT(0)
+    	vout_ij = FT(0)
 
-    phit = Vector{FT}(undef,qm1)
+    	for el in 1:Nel #-----for each element elno 
+	        s1 = o1[el]+1; e1 = o1[el+1]; l1 = e1-s1+1;
+    	    s2 = o2[el]+1; e2 = o2[el+1]; l2 = e2-s2+1;  
+        	s3 = o3[el]+1; e3 = o3[el+1]; l3 = e3-s3+1;
 
-    for el in 1:Nel #-----for each element elno 
-        if length(intrp_brck.ξ1[el]) > 0
-            l1 = length(intrp_brck.ξ1[el]); l2 = length(intrp_brck.ξ2[el]); l3 = length(intrp_brck.ξ3[el]) 
-            lag    = @view sv[:,st_idx,el]
-            offset = intrp_brck.offset[el]
+	        if l1 > 0
+    	        f1  = view(flg1,s1:e1); fac1l = view(fac1,s1:e1); ξ1l = view(ξ1,s1:e1);
+        	    f2  = view(flg2,s2:e2); fac2l = view(fac2,s2:e2); ξ2l = view(ξ2,s2:e2); 
+            	f3  = view(flg3,s3:e3); fac3l = view(fac3,s3:e3); ξ3l = view(ξ3,s3:e3); 
+	            lag = view(sv,:,st_idx,el)
 
-
-            phir = Elements.interpolationmatrix(m1_r, intrp_brck.ξ1[el], wb)
-            phis = Elements.interpolationmatrix(m1_r, intrp_brck.ξ2[el], wb)
-
-            for k in 1:l3 # interpolating point-by-point
-                interpolationvector_1pt!(m1_r,intrp_brck.ξ3[el][k],wb,phit)
-
-                for j in 1:l2, i in 1:l1
-                    vout = 0            
-                    for ik in 1:qm1
-                        v_ij = 0
-                        for ij in 1:qm1
-                            v_ii = 0
-                            for ii in 1:qm1
-                                @inbounds v_ii += lag[ii + (ij-1)*qm1 + (ik-1)*qm1*qm1] * phir[i,ii]
-                            end # ii loop
-
-                            @inbounds v_ij += v_ii * phis[j,ij]
-                        end # ij loop
-                        @inbounds vout += v_ij * phit[ik]
-                    end # ik loop
-                    @inbounds intrp_brck.v[ offset + i + (j-1)*l1 + (k-1)*l1*l2] = vout 
-                end # j, i loop
-            end # k loop
-        end
-  #--------------------
-  end
+    	        for k in 1:l3, j in 1:l2, i in 1:l1 # interpolating point-by-point
+            	    vout = 0            
+                    f3[k] == 0 ? (ikloop = 1:qm1) : (ikloop = f3[k]:f3[k])
+                   	for ik in ikloop #1:qm1
+                       	v_ij = 0
+	                    f2[j] == 0 ? (ijloop = 1:qm1) : (ijloop = f2[j]:f2[j])
+    	                for ij in ijloop #1:qm1
+        	                #----------------------------------------------------------------------
+            	            if f1[i]==0
+                                v_ii = 0
+                   	            for ii in 1:qm1
+                       	            @inbounds v_ii += lag[ii + (ij-1)*qm1 + (ik-1)*qm1*qm1] *  wb[ii] / (ξ1l[i]-m1_r[ii]) #phir[i,ii]
+                           	    end # ii loop
+	                        else
+    	                        @inbounds v_ii = lag[f1[i] + (ij-1)*qm1 + (ik-1)*qm1*qm1]
+        	                end
+            	            if f2[j]==0
+                                @inbounds v_ij += v_ii * wb[ij] / (ξ2l[j]-m1_r[ij])#phis[j,ij]
+                  	        else
+                       	        v_ij = v_ii
+                           	end
+	                        #----------------------------------------------------------------------
+    	                end # ij loop
+        	            if f3[k]==0
+            	            @inbounds vout += v_ij * wb[ik] / (ξ3l[k]-m1_r[ik]) #phit[ik]
+                        else
+                   	        vout = v_ij
+                       	end
+	                end # ik loop
+    	            @inbounds v[ offset[el] + i + (j-1)*l1 + (k-1)*l1*l2] = (vout * fac1l[i] * fac2l[j] * fac3l[k]) 
+            	end # i,j,k loop
+	        end
+	    end
+    #--------------------
+    else
+		@cuda threads=(qm1,qm1) blocks=Nel shmem=qm1*(qm1+2)*sizeof(FT) interpolate_brick_CUDA!(offset,  m1_r, wb, ξ1, ξ2, ξ3, 
+                                                      o1, o2, o3, flg1, flg2, flg3, fac1, fac2, fac3, v, sv, st_idx)
+    end
 end
 #--------------------------------------------------------
-#=function interpolate_brick_v2!(intrp_brck::InterpolationBrick, sv::AbstractArray{FT}, st_no::T, poly_order::T) where {T <: Integer, FT <: AbstractFloat}
+function interpolate_brick_CUDA!(offset::AbstractArray{T,1},  m1_r::AbstractArray{FT,1},   wb::AbstractArray{FT,1}, 
+                                     ξ1::AbstractArray{FT,1},   ξ2::AbstractArray{FT,1},   ξ3::AbstractArray{FT,1}, 
+                                     o1::AbstractArray{T,1},    o2::AbstractArray{T,1},    o3::AbstractArray{T,1}, 
+                                   flg1::AbstractArray{T,1},  flg2::AbstractArray{T,1},  flg3::AbstractArray{T,1}, 
+                                   fac1::AbstractArray{FT,1}, fac2::AbstractArray{FT,1}, fac3::AbstractArray{FT,1}, 
+                                      v::AbstractArray{FT,1},   sv::AbstractArray{FT}, st_idx::T) where {T <: Int, FT <: AbstractFloat}
 
-    qm1 = poly_order + 1
-    Nel = length(intrp_brck.realelems)
-    m1_r, m1_w = GaussQuadrature.legendre(FT,qm1,GaussQuadrature.both)
-    wb = Elements.baryweights(m1_r)
-    Nel = length(intrp_brck.realelems)
-    alpha = FT(1)
-    beta  = FT(0)
-    #-----for each element elno 
-    for el in 1:Nel
-        if length(intrp_brck.ξ1[el]) > 0
-            lag    = @view sv[:,st_no,el]
-            phir = Elements.interpolationmatrix(m1_r, intrp_brck.ξ1[el], wb)
-            phis = Elements.interpolationmatrix(m1_r, intrp_brck.ξ2[el], wb)
-            phit = Elements.interpolationmatrix(m1_r, intrp_brck.ξ3[el], wb)
 
-            sr,si = size(phir); ss,sj = size(phis); st,sk = size(phit)
-            #---------------------------------------------------------------
-            h1 = zeros(FT, sj*sk, sr)  # this is for testing only
-            h2 = zeros(FT, sk*sr, ss)  # memory allocations within the function will be removed
-            #---------------------------------------------------------------
-            LinearAlgebra.BLAS.gemm!('T', 'T', alpha, reshape(lag,si, sj*sk), phir, beta, h1)
-            LinearAlgebra.BLAS.gemm!('T', 'T', alpha, reshape(h1, sj, sk*sr), phis, beta, h2)
-            LinearAlgebra.BLAS.gemm!('T', 'T', alpha, reshape(h2, sk, sr*ss), phit, beta, reshape(intrp_brck.V[el], sr*ss, st))
-            #---------------------------------------------------------------
+
+    tj = threadIdx().x; tk = threadIdx().y; # thread ids	
+    el = blockIdx().x                       # assigning one element per block 
+
+    qm1 = length(m1_r)
+    #--------creating views for shared memory
+    shm_FT = @cuDynamicSharedMem(FT, (qm1,qm1+2)) 
+    
+    vout_jk = view(shm_FT,:,1:qm1)
+    wb_sh   = view(shm_FT,:,qm1+1) 
+    m1_r_sh = view(shm_FT,:,qm1+2) 
+    #------loading shared memory-----------------------------
+    if tk==1
+        wb_sh[tj]   = wb[tj]
+        m1_r_sh[tj] = m1_r[tj] 
+    end 
+    sync_threads() 
+    #-----------------------------------
+    off = offset[el]
+    #-----------------------------------
+    s1 = o1[el]+1; e1 = o1[el+1]; l1 = e1-s1+1;
+    s2 = o2[el]+1; e2 = o2[el+1]; l2 = e2-s2+1;  
+   	s3 = o3[el]+1; e3 = o3[el+1]; l3 = e3-s3+1;
+
+    if l1 > 0
+        for k in 1:l3, j in 1:l2, i in 1:l1 # interpolating point-by-point
+			f1 = flg1[s1+i-1]; fac1l = fac1[s1+i-1]; ξ1l = ξ1[s1+i-1]
+			f2 = flg2[s2+j-1]; fac2l = fac2[s2+j-1]; ξ2l = ξ2[s2+j-1]
+			f3 = flg3[s3+k-1]; fac3l = fac3[s3+k-1]; ξ3l = ξ3[s3+k-1]
+            if f1==0 # applying phir
+                @inbounds vout_jk[tj,tk] = sv[1 + (tj-1)*qm1 + (tk-1)*qm1*qm1, st_idx, el] *  wb_sh[1] / (ξ1l-m1_r_sh[1])  
+             	for ii in 2:qm1
+                    @inbounds vout_jk[tj,tk] += sv[ii + (tj-1)*qm1 + (tk-1)*qm1*qm1, st_idx, el] *  wb_sh[ii] / (ξ1l-m1_r_sh[ii]) 
+                end
+            else
+                @inbounds vout_jk[tj,tk] = sv[f1 + (tj-1)*qm1 + (tk-1)*qm1*qm1, st_idx, el]
+            end
+            if f2==0 # applying phis
+                @inbounds vout_jk[tj,tk] *= (wb_sh[tj] / (ξ2l-m1_r_sh[tj]))
+            end
+            sync_threads() 
+
+	        if tj==1 # reduction
+    	        if f2==0
+        	        for ij in 2:qm1
+            	        @inbounds vout_jk[1,tk]  += vout_jk[ij,tk]
+                	end
+	            else
+    	            if f2 ≠ 1
+        	            @inbounds vout_jk[1,tk] = vout_jk[f2,tk]
+            	    end
+	            end
+	
+    	        if f3==0 # applying phit
+        	        @inbounds vout_jk[1,tk] *= (wb_sh[tk] / (ξ3l-m1_r_sh[tk]))
+            	end
+	        end
+    	    sync_threads()
+
+	        if tj==1 && tk==1 # reduction
+    	        if f3==0
+        	        for ik in 2:qm1
+            	        @inbounds vout_jk[1,1] += vout_jk[1,ik] 
+                	end
+	            else
+    	            if f3 ≠ 1
+        	            @inbounds vout_jk[1,1] = vout_jk[1,f3]
+            	    end
+	            end
+    	        @inbounds v[off + i + (j-1)*l1 + (k-1)*l1*l2] = ( vout_jk[1,1] * fac1l * fac2l * fac3l )
+        	end
         end
-  #--------------------
-  end
-end=#
 
+    end
+
+    return nothing
+end
 #--------------------------------------------------------
 """
     interpolationvector_1pt!(rsrc::Vector{FT}, rdst::FT,
@@ -236,10 +398,10 @@ This interpolation structure and the corresponding functions works for a cubed s
  - `long_res` Resolution of the interpolation grid along the longitude coordinate in radians 
  - `rad_res` Resolution of the interpolation grid along the radial coordinate 
 """
-struct InterpolationCubedSphere{T <: Integer, FT <: AbstractFloat}
+struct InterpolationCubedSphere{T <: Int, FT <: AbstractFloat, TA<:AbstractArray{T,1}, FTA<:AbstractArray{FT,1}}
 
     realelems::UnitRange{Int64}
-    poly_order::Int
+    poly_order::T
 
     lat_min::FT;  long_min::FT;  rad_min::FT; # domain bounds, min
     lat_max::FT;  long_max::FT;  rad_max::FT; # domain bounds, max
@@ -247,23 +409,34 @@ struct InterpolationCubedSphere{T <: Integer, FT <: AbstractFloat}
 
     n_lat::T; n_long::T; n_rad::T;            # # of lat, long & rad grid locations
 
-    ξ1::Vector{Vector{FT}} # ξ1 coordinates of interpolation points within each element 
-    ξ2::Vector{Vector{FT}} # ξ2 coordinates of interpolation points within each element 
-    ξ3::Vector{Vector{FT}} # ξ3 coordinates of interpolation points within each element 
+    ξ1::FTA #Device array containing ξ1 coordinates of interpolation points within each element 
+    ξ2::FTA #Device array containing ξ2 coordinates of interpolation points within each element 
+    ξ3::FTA #Device array containing ξ3 coordinates of interpolation points within each element 
 
-    radc::Vector{Vector{FT}}  # rad coordinates of interpolation points within each element
-    latc::Vector{Vector{FT}}  # lat coordinates of interpolation points within each element
-    longc::Vector{Vector{FT}} # long coordinates of interpolation points within each element
+    flg::AbstractArray{T,2} # flags when ξ1/ξ2/ξ3 interpolation point matches with a GLL point
+
+    fac::FTA # normalization factor
+
+    radc::FTA  # rad coordinates of interpolation points within each element
+    latc::FTA  # lat coordinates of interpolation points within each element
+    longc::FTA # long coordinates of interpolation points within each element
 
 
-    v::AbstractArray{FT,1} # interpolated variable within each element
-    offset::Vector{Int}    # offsets for each element for v 
+    v::FTA      # interpolated variable within each element
+    offset::TA  # offsets for each element for v 
+
+    m1_r::FTA   # GLL points
+    m1_w::FTA   # GLL weights
+    wb::FTA     # Barycentric weights
+
   #--------------------------------------------------------
     function InterpolationCubedSphere(grid::DiscontinuousSpectralElementGrid, vert_range::AbstractArray{FT}, nhor::Int, lat_res::FT, long_res::FT, rad_res::FT) where {FT <: AbstractFloat}
+		DA = CLIMA.array_type()                    # device array
         poly_order = polynomialorder(grid)
+        qm1    = poly_order + 1
         toler1 = FT(eps(FT) * vert_range[1] * 2.0) # tolerance for unwarp function
         toler2 = FT(eps(FT) * 4.0)                 # tolerance 
-        toler3 = FT(eps(FT) * vert_range[1] * 4.0) # tolerance for Newton-Raphson 
+        toler3 = FT(eps(FT) * vert_range[1] * 10.0) # tolerance for Newton-Raphson 
 
         lat_min,   lat_max = FT(0.0), FT(π)                 # inclination/zeinth angle range
         long_min, long_max = FT(0.0), FT(2*π)  			    # azimuthal angle range
@@ -344,7 +517,7 @@ struct InterpolationCubedSphere{T <: Integer, FT <: AbstractFloat}
 		        l2 = min(div(x2_uw2_grd + 1, Δh) + 1, nhor)
                 el_glob = Int(l_nrm + (l1-1)*nvert + (nhor-l2)*nvert*nhor + nblck*5)
             else
-                error("error: unwrapped grid does on lie on any of the 6 faces")
+                error("error: unwrapped grid does not lie on any of the 6 faces")
             end
             #--------------------------------
             el_loc = findfirst(X -> X-el_glob == 0, glob_elem_no)
@@ -363,11 +536,62 @@ struct InterpolationCubedSphere{T <: Integer, FT <: AbstractFloat}
         end
 
         [ offset[el+1] = offset[el] + length(radc[el]) for el in 1:Nel]
+
+        Np = offset[Nel+1]
  
         v = Vector{FT}(undef,offset[Nel+1]) # Allocating storage for interpolation variable
 
-        return new{Int, FT}(realelems, poly_order, lat_min, long_min, rad_min, lat_max, long_max, rad_max, lat_res, long_res, rad_res, 
-                    n_lat, n_long, n_rad, ξ1, ξ2, ξ3, radc, latc, longc, v, offset)
+        ξ1_d = Array{FT}(undef,Np); ξ2_d = Array{FT}(undef,Np); ξ3_d = Array{FT}(undef,Np)
+
+        flg_d = zeros(Int,3,Np); fac_d  = ones(FT,Np)
+
+        rad_d  = Array{FT}(undef,Np); lat_d  = Array{FT}(undef,Np); long_d = Array{FT}(undef,Np)
+
+        m1_r, m1_w = GaussQuadrature.legendre(FT,qm1,GaussQuadrature.both)
+        wb = Elements.baryweights(m1_r)
+
+
+        for i in 1:Nel
+            ctr = 1
+            for j in offset[i]+1:offset[i+1]
+                ξ1_d[j]    = ξ1[i][ctr]
+                ξ2_d[j]    = ξ2[i][ctr]
+                ξ3_d[j]    = ξ3[i][ctr]
+                rad_d[j]  = radc[i][ctr]
+                lat_d[j]  = latc[i][ctr]
+                long_d[j] = longc[i][ctr]
+                #-----setting up interpolation 
+                l1 = findfirst(X -> abs.(X.-ξ1_d[j]) < toler2, m1_r); fac1 = FT(0)
+                l2 = findfirst(X -> abs.(X.-ξ2_d[j]) < toler2, m1_r); fac2 = FT(0)
+                l3 = findfirst(X -> abs.(X.-ξ3_d[j]) < toler2, m1_r); fac3 = FT(0)
+
+                l1 == nothing ? [ fac1 +=  wb[ib] / (ξ1_d[j]-m1_r[ib]) for ib in 1:qm1 ] : (flg_d[1,j] = l1; fac1 = FT(1);)
+                l2 == nothing ? [ fac2 +=  wb[ib] / (ξ2_d[j]-m1_r[ib]) for ib in 1:qm1 ] : (flg_d[2,j] = l2; fac2 = FT(1);)
+                l3 == nothing ? [ fac3 +=  wb[ib] / (ξ3_d[j]-m1_r[ib]) for ib in 1:qm1 ] : (flg_d[3,j] = l3; fac3 = FT(1);)
+
+                fac_d[j] = FT(1) / (fac1 * fac2 * fac3)
+
+                #-----------------------------
+                ctr += 1
+            end 
+        end
+
+
+        ξ1_d = DA(ξ1_d); ξ2_d = DA(ξ2_d); ξ3_d = DA(ξ3_d)
+
+        flg_d = DA(flg_d); fac_d = DA(fac_d)
+
+        rad_d = DA(rad_d); lat_d = DA(lat_d); long_d = DA(long_d)
+
+        m1_r = DA(m1_r); m1_w = DA(m1_w); wb = DA(wb);
+        
+        offset = DA(offset); v = DA(v);
+println("DA = ", DA)
+println("typeof(v) = ", typeof(v))
+println("typeof(offset) = ", typeof(offset))
+
+        return new{Int, FT, AbstractArray{Int,1}, AbstractArray{FT,1}}(realelems, poly_order, lat_min, long_min, rad_min, lat_max, long_max, rad_max, lat_res, long_res, rad_res, 
+                    n_lat, n_long, n_rad, ξ1_d, ξ2_d, ξ3_d, flg_d, fac_d, rad_d, lat_d, long_d, v, offset, m1_r, m1_w, wb)
 
     #-----------------------------------------------------------------------------------
     end # Inner constructor function InterpolationCubedSphere
@@ -385,7 +609,7 @@ This function computes (ξ1,ξ2,ξ3) given (x1,x2,x3) and the (8) vertex coordin
  - `x` (x1,x2,x3) coordinates of the 
 """
 function invert_trilear_mapping_hex(X1::Array{FT}, X2::Array{FT}, X3::Array{FT}, x::Array{FT}, tol::FT) where FT <: AbstractFloat 
-    max_it = 10            # maximum # of iterations
+    max_it = 10        # maximum # of iterations
     ξ      = zeros(FT,3,1) # initial guess => cell centroid
 
     d   = trilinear_map(ξ, X1, X2, X3) - x
@@ -440,46 +664,169 @@ function trilinear_map_IJac_x_vec!(ξ::Array{FT}, x1v::Array{FT}, x2v::Array{FT}
     return nothing 
 end
 #--------------------------------------------------------
-function interpolate_cubed_sphere!(intrp_cs::InterpolationCubedSphere, sv::AbstractArray{FT}, st_no::T) where {T <: Integer, FT <: AbstractFloat}
-    qm1 = intrp_cs.poly_order + 1
-    Nel = length(intrp_cs.realelems)
-    m1_r, m1_w = GaussQuadrature.legendre(FT,qm1,GaussQuadrature.both)
-    wb = Elements.baryweights(m1_r)
-    phir = MVector{qm1,FT}(undef)
-    phis = MVector{qm1,FT}(undef)
-    phit = MVector{qm1,FT}(undef)
+function interpolate_cubed_sphere!(offset::AbstractArray{T,1}, m1_r::AbstractArray{FT,1}, wb::AbstractArray{FT,1}, 
+                                   ξ1::AbstractArray{FT,1}, ξ2::AbstractArray{FT,1}, ξ3::AbstractArray{FT,1}, 
+                                   flg::AbstractArray{T,2}, fac::AbstractArray{FT,1},
+                                   v::AbstractArray{FT,1}, sv::AbstractArray{FT}, st_no::T) where {T <: Integer, FT <: AbstractFloat}
 
-    vout    = FT(0)
-    vout_ii = FT(0)
-    vout_ij = FT(0)
+    qm1 = length(m1_r)
+    Nel = length(offset) - 1
 
-    for el in 1:Nel #-----for each element elno 
-        np = length(intrp_cs.ξ1[el])
-        lag    = @view sv[:,st_no,el]
-        offset = intrp_cs.offset[el]
+	device = typeof(sv) <: Array ? CPU() : CUDA()
 
-        for i in 1:np # interpolating point-by-point
-            interpolationvector_1pt!(m1_r,intrp_cs.ξ1[el][i],wb,phir)
-            interpolationvector_1pt!(m1_r,intrp_cs.ξ2[el][i],wb,phis)
-            interpolationvector_1pt!(m1_r,intrp_cs.ξ3[el][i],wb,phit)
-            vout = 0.0
-            for ik in 1:qm1
-                vout_ij = 0.0
-                for ij in 1:qm1 
-                    vout_ii = 0.0 
-                    for ii in 1:qm1
-                        @inbounds vout_ii += lag[ii + (ij-1)*qm1 + (ik-1)*qm1*qm1] * phir[ii]
+    if device==CPU()
+println("calling CPU")
+        #------------------------------------------------------------------------------------------
+        Nel = length(offset) - 1
+
+        vout    = FT(0)
+        vout_ii = FT(0)
+        vout_ij = FT(0)
+
+        for el in 1:Nel #-----for each element elno 
+            np  = offset[el+1] - offset[el]
+            lag = @view sv[:,st_no,el]
+            off = offset[el]
+
+            for i in 1:np # interpolating point-by-point
+                ξ1l = ξ1[off+i]; ξ2l = ξ2[off+i]; ξ3l = ξ3[off+i]
+
+                f1 = flg[1,off+i]; f2 = flg[2,off+i]; f3 = flg[3,off+i]
+                fc = fac[off+i]
+
+                vout = 0.0
+                f3 == 0 ? (ikloop = 1:qm1) : (ikloop = f3:f3)
+
+                for ik in ikloop
+                    #--------------------------------------------
+                    vout_ij = 0.0
+                    f2 == 0 ? (ijloop = 1:qm1) : (ijloop = f2:f2)
+                    for ij in ijloop #1:qm1 
+                        #----------------------------------------------------------------------------
+                        vout_ii = 0.0 
+
+                        if f1 == 0
+                            for ii in 1:qm1
+                                @inbounds vout_ii += lag[ii + (ij-1)*qm1 + (ik-1)*qm1*qm1] *  wb[ii] / (ξ1l-m1_r[ii])#phir[ii]
+                            end
+                        else
+                            @inbounds vout_ii = lag[f1 + (ij-1)*qm1 + (ik-1)*qm1*qm1]
+                        end
+                        if f2==0
+                            @inbounds vout_ij += vout_ii * wb[ij] / (ξ2l-m1_r[ij])#phis[ij]
+                        else
+                            @inbounds vout_ij = vout_ii
+                        end
+                        #----------------------------------------------------------------------------
                     end
-                    @inbounds vout_ij += vout_ii * phis[ij]
+                    if f3==0
+                        @inbounds vout += vout_ij * wb[ik] / (ξ3l-m1_r[ik])#phit[ik]
+                    else
+                        @inbounds vout = vout_ij
+                    end
+                    #--------------------------------------------
                 end
-                @inbounds vout += vout_ij * phit[ik]
-            end
-            @inbounds intrp_cs.v[offset + i] = vout 
+                @inbounds v[off + i] = vout * fc
 
+            end
         end
-  #--------------------
-  end
-  #--------------------
+        #------------------------------------------------------------------------------------------
+    else
+        #------------------------------------------------------------------------------------------
+println("calling CUDA")
+        @cuda threads=(qm1,qm1) blocks=Nel shmem=qm1*(qm1+2)*sizeof(FT) interpolate_cubed_sphere_CUDA!(offset, m1_r, wb, ξ1, ξ2, ξ3, flg, fac, v, sv, st_no)
+        #------------------------------------------------------------------------------------------
+    end
+    return nothing
+end
+#--------------------------------------------------------
+function interpolate_cubed_sphere_CUDA!(offset::AbstractArray{T,1}, m1_r::AbstractArray{FT,1}, wb::AbstractArray{FT,1}, 
+                                        ξ1::AbstractArray{FT,1}, ξ2::AbstractArray{FT,1}, ξ3::AbstractArray{FT,1}, 
+                                        flg::AbstractArray{T,2}, fac::AbstractArray{FT,1},
+                                        v::AbstractArray{FT,1}, sv::AbstractArray{FT}, st_no::T) where {T <: Integer, FT <: AbstractFloat}
+
+    tj = threadIdx().x; tk = threadIdx().y; # thread ids	
+    el = blockIdx().x                       # assigning one element per block 
+
+
+    qm1 = length(m1_r)
+    #--------creating views for shared memory
+    shm_FT = @cuDynamicSharedMem(FT, (qm1,qm1+2)) 
+    
+    vout_jk = view(shm_FT,:,1:qm1)
+    wb_sh   = view(shm_FT,:,qm1+1) 
+    m1_r_sh = view(shm_FT,:,qm1+2) 
+    #------loading shared memory-----------------------------
+    if tk==1
+        wb_sh[tj]   = wb[tj]
+        m1_r_sh[tj] = m1_r[tj] 
+    end 
+    sync_threads() 
+    #-----------------------------------
+
+
+    #-----------------------------------
+    np  = offset[el+1] - offset[el]
+    off = offset[el]
+
+    for i in 1:np # interpolating point-by-point
+        #-----------------------------------
+        ξ1l = ξ1[off+i]; ξ2l = ξ2[off+i]; ξ3l = ξ3[off+i]
+
+        f1 = flg[1,off+i]; f2 = flg[2,off+i]; f3 = flg[3,off+i]
+        fc = fac[off+i]
+
+
+        if f1==0 # applying phir
+            @inbounds vout_jk[tj,tk] = sv[1 + (tj-1)*qm1 + (tk-1)*qm1*qm1, st_no, el] *  wb_sh[1] / (ξ1l-m1_r_sh[1])  
+           	for ii in 2:qm1
+                @inbounds vout_jk[tj,tk] += sv[ii + (tj-1)*qm1 + (tk-1)*qm1*qm1, st_no, el] *  wb_sh[ii] / (ξ1l-m1_r_sh[ii]) 
+            end
+        else
+            @inbounds vout_jk[tj,tk] = sv[f1 + (tj-1)*qm1 + (tk-1)*qm1*qm1, st_no, el]
+        end
+
+        if f2==0 # applying phis
+            @inbounds vout_jk[tj,tk] *= (wb_sh[tj] / (ξ2l-m1_r_sh[tj]))
+        end
+        sync_threads() 
+            
+        if tj==1 # reduction
+            if f2==0
+                for ij in 2:qm1
+                    @inbounds vout_jk[1,tk]  += vout_jk[ij,tk]
+                end
+            else
+                if f2 ≠ 1
+                    @inbounds vout_jk[1,tk] = vout_jk[f2,tk]
+                end
+            end
+
+            if f3==0 # applying phit
+                @inbounds vout_jk[1,tk] *= (wb_sh[tk] / (ξ3l-m1_r_sh[tk]))
+            end
+        end
+        sync_threads()
+
+        if tj==1 && tk==1 # reduction
+            if f3==0
+                for ik in 2:qm1
+                    @inbounds vout_jk[1,1] += vout_jk[1,ik] 
+                end
+            else
+                if f3 ≠ 1
+                    @inbounds vout_jk[1,1] = vout_jk[1,f3]
+                end
+            end
+            @inbounds v[off + i] = vout_jk[1,1] * fc
+        end
+
+
+            #-----------------------------------
+    end
+    #-----------------------------------
+
+    return nothing
 end
 #--------------------------------------------------------
 end # module interploation
