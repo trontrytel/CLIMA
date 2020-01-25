@@ -9,11 +9,13 @@ include("LinearSolvers_kernels.jl")
 
 # just for testing LinearSolvers
 LinearAlgebra.norm(A::MVector, p::Real, weighted::Bool) = norm(A, p)
-LinearAlgebra.norm(A::Vector, p::Real, weighted::Bool) = norm(A, p)
 LinearAlgebra.norm(A::MVector, weighted::Bool) = norm(A, 2, weighted)
-LinearAlgebra.norm(A::Vector, weighted::Bool) = norm(A, 2, weighted)
 LinearAlgebra.dot(A::MVector, B::MVector, weighted) = dot(A, B)
-LinearAlgebra.dot(A::Vector, B::Vector, weighted) = dot(A, B)
+
+# FIXME: This is silly
+LinearAlgebra.norm(A::AbstractVector, p::Real, weighted::Bool) = norm(A, p)
+LinearAlgebra.norm(A::AbstractVector, weighted::Bool) = norm(A, 2, weighted)
+LinearAlgebra.dot(A::AbstractVector, B::AbstractVector, weighted) = dot(A, B)
 
 export linearsolve!, settolerance!, prefactorize
 export AbstractLinearSolver, AbstractIterativeLinearSolver
@@ -98,7 +100,7 @@ function linearsolve!(linearoperator!, solver::AbstractIterativeLinearSolver, Q,
     achieved_tolerance = residual_norm / threshold * solver.tolerance[1]
   end
 
-  iters
+  iters, converged
 end
 
 end
