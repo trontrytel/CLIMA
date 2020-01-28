@@ -45,7 +45,7 @@ struct GeneralizedMinimalResidual{M, MP1, MMP1, T, AT} <: LS.AbstractIterativeLi
   tolerances::MArray{Tuple{2}, T, 1, 2}
 
   function GeneralizedMinimalResidual(Q::AT; M=min(20, eltype(Q)), rtol=√eps(eltype(AT)),
-                                      atol=√eps(eltype(AT))) where AT
+                                      atol=eps(eltype(AT))) where AT
     krylov_basis = ntuple(i -> similar(Q), M + 1)
     FT = eltype(Q)
     H = Matrix{FT}(undef, M+1, M)
