@@ -42,9 +42,10 @@ struct GeneralizedMinimalResidual{M, MP1, MMP1, T, AT} <: LS.AbstractIterativeLi
   H::Matrix{T}
   "rhs of the least squares problem"
   g0::Vector{T}
-  tolerance::MArray{Tuple{1}, T, 1, 1}
+  tolerances::MArray{Tuple{2}, T, 1, 2}
 
-  function GeneralizedMinimalResidual(M, Q::AT, tolerance) where AT
+  function GeneralizedMinimalResidual(Q::AT; M=min(20, eltype(Q)), rtol=√eps(eltype(AT)),
+                                      atol=√eps(eltype(AT))) where AT
     krylov_basis = ntuple(i -> similar(Q), M + 1)
     FT = eltype(Q)
     H = Matrix{FT}(undef, M+1, M)
@@ -52,7 +53,7 @@ struct GeneralizedMinimalResidual{M, MP1, MMP1, T, AT} <: LS.AbstractIterativeLi
     g0 = Vector{FT}(undef, M+1)
     fill!(g0, FT(0))
 
-    new{M, M + 1, M * (M + 1), FT, typeof(krylov_basis[1])}(krylov_basis, H, g0, (tolerance,))
+    new{M, M + 1, M * (M + 1), FT, typeof(krylov_basis[1])}(krylov_basis, H, g0, (rtol, atol))
   end
 end
 
@@ -70,12 +71,14 @@ function LS.initialize!(linearoperator!, Q, Qrhs,
     krylov_basis[1] .*= -1
     krylov_basis[1] .+= Qrhs
 
-    threshold = solver.tolerance[1] * norm(krylov_basis[1], weighted)
+    rtol, atol = solver.tolerances
+
+    threshold = rtol * norm(krylov_basis[1], weighted)
     residual_norm = norm(krylov_basis[1], weighted)
 
     converged = false
     # FIXME: Should only be true for threshold zero
-    if threshold <=10eps(eltype(Q))
+    if threshold < atol
       converged = true
       return converged, threshold
     end
@@ -84,7 +87,7 @@ function LS.initialize!(linearoperator!, Q, Qrhs,
     g0[1] = residual_norm
     krylov_basis[1] ./= residual_norm
 
-    converged, threshold
+    converged, max(threshold, atol)
 end
 
 nonan(v) = ~any(isnan, v.data)
