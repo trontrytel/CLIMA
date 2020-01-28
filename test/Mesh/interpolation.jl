@@ -42,7 +42,7 @@ const ArrayType = CLIMA.array_type()
 #------------------------------------------------
 function run_brick_interpolation_test()
   MPI.Initialized() || MPI.Init()
-
+  DA = CLIMA.array_type()
 #@testset "LocalGeometry" begin
     FT = Float64
 #    ArrayType = ArrayType #Array
@@ -50,12 +50,14 @@ function run_brick_interpolation_test()
 
     xmin, ymin, zmin = 0, 0, 0                   # defining domain extent
     xmax, ymax, zmax = 2000, 400, 2000
-    xres = [FT(200), FT(200), FT(200)] # resolution of interpolation grid
+#    xres = [FT(200), FT(200), FT(200)] # resolution of interpolation grid
+#    xres = [FT(5), FT(5), FT(5)] # resolution of interpolation grid
+    xres = [FT(10), FT(10), FT(10)] # resolution of interpolation grid
 
 #    Ne        = (4,4,4)
-#    Ne        = (20,2,20)
-#    Ne        = (60,8,60)
-    Ne        = (4,2,4)
+    Ne        = (20,4,20)
+#    Ne        = (80,64,80)
+#    Ne        = (4,2,4)
 
     polynomialorder = 5 #8# 5 #8 #4
     #-------------------------
@@ -98,30 +100,23 @@ function run_brick_interpolation_test()
     st_idx = _ρ # state vector
 
     var = @view Q.data[:,st_idx,:]
-
+println("typeof(Q.data) = $(typeof(Q.data))")
     #fcn(x,y,z) = x .* y .* z # sample function
     fcn(x,y,z) = sin.(x) .* cos.(y) .* cos.(z) # sample function
 
     var .= fcn( x1 ./ xmax, x2 ./ ymax, x3 ./ zmax )
     #----calling interpolation function on state variable # st_idx--------------------------
-    #intrp_brck = InterpolationBrick(grid, xres, FT)
-    intrp_brck = InterpolationBrick(grid, xres)
+    println("timing interpolation setup")
+    @time intrp_brck = InterpolationBrick(grid, xres)
+    
+    iv = DA( Array{FT}(undef,intrp_brck.offset[end]) )
+ 
+    println("timing interpolation/ first call")
+    @time interpolate_brick!(intrp_brck, iv, Q.data, st_idx)
 
-
-    interpolate_brick!(intrp_brck.offset, intrp_brck.m1_r, intrp_brck.wb, 
-                       intrp_brck.ξ1, intrp_brck.ξ2, intrp_brck.ξ3, 
-                       intrp_brck.o1, intrp_brck.o2, intrp_brck.o3, 
-                       intrp_brck.flg1, intrp_brck.flg2, intrp_brck.flg3, 
-                       intrp_brck.fac1, intrp_brck.fac2, intrp_brck.fac3, 
-                       intrp_brck.v, Q.data, st_idx)
-
-    for i in 1:20
-        @time interpolate_brick!(intrp_brck.offset, intrp_brck.m1_r, intrp_brck.wb, 
-                               intrp_brck.ξ1, intrp_brck.ξ2, intrp_brck.ξ3, 
-                               intrp_brck.o1, intrp_brck.o2, intrp_brck.o3, 
-                               intrp_brck.flg1, intrp_brck.flg2, intrp_brck.flg3, 
-                               intrp_brck.fac1, intrp_brck.fac2, intrp_brck.fac3, 
-                               intrp_brck.v, Q.data, st_idx)
+    println("timing interpolate_brick")
+    for i in 1:10
+        @time interpolate_brick!(intrp_brck, iv, Q.data, st_idx)
     end
     #------testing
     Nel = length( grid.topology.realelems )
@@ -131,11 +126,15 @@ function run_brick_interpolation_test()
         st  = intrp_brck.offset[elno] + 1
         en  = intrp_brck.offset[elno+1]
         if en ≥ st
-            fex = fcn( intrp_brck.x[elno][1,:] ./ xmax , intrp_brck.x[elno][2,:] ./ ymax , intrp_brck.x[elno][3,:] ./ zmax )
-            error[elno] = maximum(abs.( Array(intrp_brck.v[st:en])-fex[:]))
-println("$elno). error = ", error[elno])
-        else
-println("$elno). No interpolation points in this element")
+            fex = fcn( intrp_brck.x1g[ Array(intrp_brck.x1i[st:en]) ] ./ xmax, 
+                       intrp_brck.x2g[ Array(intrp_brck.x2i[st:en]) ] ./ ymax,
+                       intrp_brck.x3g[ Array(intrp_brck.x3i[st:en]) ] ./ zmax)
+            error[elno] = maximum(abs.( Array(iv[st:en])-fex[:]))
+##if error[elno] ≥ 1E-6
+##println("$elno). error = ", error[elno])
+##end
+#        else
+#println("$elno). No interpolation points in this element")
         end
     end
 
@@ -144,7 +143,7 @@ println("$elno). No interpolation points in this element")
 #    display(error)
     l_infinity_local = maximum(error)
     l_infinity_domain = MPI.Allreduce(l_infinity_local, MPI.MAX, mpicomm)
-    println("First run_brick_interpolation_test(): l_infinity interpolation error in domain")
+#    println("First run_brick_interpolation_test(): l_infinity interpolation error in domain")
     display(l_infinity_domain)
 #    pid = MPI.Comm_rank(mpicomm)
 #    npr = MPI.Comm_size(mpicomm)
@@ -157,6 +156,7 @@ println("$elno). No interpolation points in this element")
 #    end
 
 #    return l_infinity_domain < 1.0e-14
+return true
     #----------------
 end #function run_brick_interpolation_test
 
@@ -188,6 +188,23 @@ struct TestSphereSetup{DT}
   end
 end
 #----------------------------------------------------------------------------
+function (setup::TestSphereSetup)(state, aux, coords, t) 
+  # callable to set initial conditions
+  FT = eltype(state)
+
+  r = norm(coords, 2)
+  h = r - FT(planet_radius)
+
+  scale_height = R_d * setup.T_initial / grav
+  p = setup.p_ground * exp(-h / scale_height)
+
+  state.ρ = air_density(setup.T_initial, p)
+  state.ρu = SVector{3, FT}(0, 0, 0)
+  state.ρe = state.ρ * (internal_energy(setup.T_initial) + aux.orientation.Φ)
+  nothing
+end
+#----------------------------------------------------------------------------
+#----------------------------------------------------------------------------
 # Cubed sphere, lat/long interpolation test
 #----------------------------------------------------------------------------
 function run_cubed_sphere_interpolation_test()
@@ -209,8 +226,8 @@ function run_cubed_sphere_interpolation_test()
     domain_height = FT(30e3) 
 
     polynomialorder = 5#12#5# 12#1#4 #5
-    numelem_horz = 3#4 #6
-    numelem_vert = 4#1 #1 #1#6 #8
+    numelem_horz = 6 #3#4 #6
+    numelem_vert = 8 #4#1 #1 #1#6 #8
 
     #-------------------------
     _x, _y, _z = CLIMA.Mesh.Grids.vgeoid.x1id, CLIMA.Mesh.Grids.vgeoid.x2id, CLIMA.Mesh.Grids.vgeoid.x3id
@@ -220,10 +237,12 @@ function run_cubed_sphere_interpolation_test()
 
  #   vert_range = grid1d(FT(1.0), FT(2.0), nelem = numelem_vert)
   
+#    lat_res  = FT( 10 * π / 180.0) # 5 degree resolution
+#    long_res = FT( 10 * π / 180.0) # 5 degree resolution
     lat_res  = FT( 1 * π / 180.0) # 5 degree resolution
     long_res = FT( 1 * π / 180.0) # 5 degree resolution
-    nel_grd  = 10
-    r_res    = FT((vert_range[end] - vert_range[1])/FT(nel_grd)) #1000.00    # 1000 m vertical resolution
+    nel_vert_grd  = 100 #100 #50 #10#50
+    r_res    = FT((vert_range[end] - vert_range[1])/FT(nel_vert_grd)) #1000.00    # 1000 m vertical resolution
 
     #----------------------------------------------------------
     setup = TestSphereSetup(FT(MSLP),FT(255),FT(30e3))
@@ -272,22 +291,28 @@ function run_cubed_sphere_interpolation_test()
   #------------------------------
     qm1 = polynomialorder + 1
 
-    intrp_cs = InterpolationCubedSphere(grid, collect(vert_range), numelem_horz, lat_res, long_res, r_res)
+    @time intrp_cs = InterpolationCubedSphere(grid, collect(vert_range), numelem_horz, lat_res, long_res, r_res)
+#for i in 1:10
+#    interp_cs = []
+
+#    @time intrp_cs = InterpolationCubedSphere(grid, collect(vert_range), numelem_horz, lat_res, long_res, r_res)
+#end
+
 println("After setting up intrp_cs")
-    interpolate_cubed_sphere!(intrp_cs.offset, intrp_cs.m1_r, intrp_cs.wb, intrp_cs.ξ1, intrp_cs.ξ2, intrp_cs.ξ3, intrp_cs.flg, intrp_cs.fac, intrp_cs.v, Q.data, st_idx)#,Val(qm1))
-    for i in 1:20
-        @time interpolate_cubed_sphere!(intrp_cs.offset, intrp_cs.m1_r, intrp_cs.wb, intrp_cs.ξ1, intrp_cs.ξ2, intrp_cs.ξ3, intrp_cs.flg, intrp_cs.fac, intrp_cs.v, Q.data, st_idx)#,Val(qm1))
-    end
-#    @launch(device, threads=(qm1,qm1), blocks=1, interpolate_cubed_sphere!(intrp_cs, Q.data, st_idx, Val(qm1)))
+
+@time    interpolate_cubed_sphere!(intrp_cs.offset, intrp_cs.m1_r, intrp_cs.wb, intrp_cs.ξ1, intrp_cs.ξ2, intrp_cs.ξ3, intrp_cs.flg, intrp_cs.fac, intrp_cs.v, Q.data, st_idx)#,Val(qm1))
+#    for i in 1:20
+#        @time interpolate_cubed_sphere!(intrp_cs.offset, intrp_cs.m1_r, intrp_cs.wb, intrp_cs.ξ1, intrp_cs.ξ2, intrp_cs.ξ3, intrp_cs.flg, intrp_cs.fac, intrp_cs.v, Q.data, st_idx)#,Val(qm1))
+#    end
     #----------------------------------------------------------
     Nel = length( grid.topology.realelems )
 
     error = zeros(FT, Nel) 
         
     offset = Array(intrp_cs.offset)
-    radc   = Array(intrp_cs.radc)
-    latc   = Array(intrp_cs.latc) 
-    longc  = Array(intrp_cs.longc) 
+    radc   = intrp_cs.rad_grd[Array(intrp_cs.radi)]
+    latc   = intrp_cs.lat_grd[Array(intrp_cs.lati)]
+    longc  = intrp_cs.long_grd[Array(intrp_cs.longi)]
     v      = Array(intrp_cs.v)
 
     for elno in 1:Nel
@@ -309,43 +334,25 @@ println("After setting up intrp_cs")
     toler = 2.0e-5
     println("l_infinity_domain = $l_infinity_domain; toler = $toler")
 
-#    if l_infinity_domain > toler
-#        pid = MPI.Comm_rank(mpicomm)
-#        npr = MPI.Comm_size(mpicomm)
+    if l_infinity_domain > toler
+        pid = MPI.Comm_rank(mpicomm)
+        npr = MPI.Comm_size(mpicomm)
 
-#        for i in 0:npr-1
-#            if i == pid
-#                println("pid = $pid; l_infinity_local = $l_infinity_local; l_infinity_domain = $l_infinity_domain")
-#            end
-#            MPI.Barrier(mpicomm)
-#        end
-        
-#        if pid == 0
-#            println("l_infinity_domain = $l_infinity_domain; toler = $toler")
-#        end
-#    end
+        for i in 0:npr-1
+            if i == pid
+                println("pid = $pid; l_infinity_local = $l_infinity_local; l_infinity_domain = $l_infinity_domain")
+            end
+            MPI.Barrier(mpicomm)
+        end
+       
+        if pid == 0
+            println("l_infinity_domain = $l_infinity_domain; toler = $toler")
+        end
+    end
 #----------------------------------------------------------------------------
     return l_infinity_domain < toler # 1.0e-12
-return true
 end 
 #----------------------------------------------------------------------------
-function (setup::TestSphereSetup)(state, aux, coords, t) 
-  # callable to set initial conditions
-  FT = eltype(state)
-
-  r = norm(coords, 2)
-  h = r - FT(planet_radius)
-
-  scale_height = R_d * setup.T_initial / grav
-  p = setup.p_ground * exp(-h / scale_height)
-
-  state.ρ = air_density(setup.T_initial, p)
-  state.ρu = SVector{3, FT}(0, 0, 0)
-  state.ρe = state.ρ * (internal_energy(setup.T_initial) + aux.orientation.Φ)
-  nothing
-end
-#----------------------------------------------------------------------------
-
 #@testset "Interpolation tests" begin
 #    @test run_brick_interpolation_test()
 #    @test run_cubed_sphere_interpolation_test()
