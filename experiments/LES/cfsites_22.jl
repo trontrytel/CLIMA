@@ -129,7 +129,7 @@ function main()
     ymax = 9600
     zmax = 6000
     t0 = FT(0)
-    timeend = FT(0.2)
+    timeend = FT(3600*4)
 
     # CFSite Specific Information
     initdata = get_ncdata()
@@ -161,7 +161,7 @@ function main()
         nothing
     end
     result = CLIMA.invoke!(solver_config;
-                          user_callbacks=(cbtmarfilter,cbinformation),
-                          check_euclidean_distance=true)
+                          user_callbacks=(cbtmarfilter,),
+                          check_euclidean_distance=false)
 end
 main()
