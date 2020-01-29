@@ -160,10 +160,6 @@ function main()
         Filters.apply!(solver_config.Q, 6, solver_config.dg.grid, TMARFilter())
         nothing
     end
-    cbinformation = GenericCallbacks.EveryXSimulationSteps(100) do (init=false)
-      @sprintf("""Working""")
-      nothing
-    end
     result = CLIMA.invoke!(solver_config;
                           user_callbacks=(cbtmarfilter,cbinformation),
                           check_euclidean_distance=true)
