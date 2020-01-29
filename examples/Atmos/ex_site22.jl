@@ -61,14 +61,12 @@ function init_cfsites!(state::Vars,
                             aux::Vars, 
                             (x1,x2,x3), 
                             t,
-                            spl_temp,
-                            spl_pfull,
-                            spl_ucomp,
-                            spl_vcomp,
-                            spl_sphum)
+                            extra_args)
 
   # Interpolate from CFSite Data
   FT = eltype(state)
+
+  (spl_temp, spl_pfull, spl_ucomp, spl_vcomp, spl_sphum) = extra_args
 
   T     = FT(spl_temp(x3))
   q_tot = FT(spl_sphum(x3))
@@ -106,32 +104,6 @@ function config_cfsites(FT, N, resolution, xmax, ymax, zmax)
   # Boundary Conditions
   bc = NoFluxBC()
 
-  # CFSite Specific Information
-  initdata = get_ncdata()
-  
-  z = initdata[:,1];
-  pfull = initdata[:,2];
-  temp  = initdata[:,3];
-  ucomp = initdata[:,4];
-  vcomp = initdata[:,5];
-  sphum = initdata[:,6];
-
-  spl_temp  = Spline1D(z,temp)
-  spl_pfull = Spline1D(z,pfull)
-  spl_ucomp = Spline1D(z,ucomp)
-  spl_vcomp = Spline1D(z,vcomp)
-  spl_sphum = Spline1D(z,sphum)
-
-  init_cfsites!(state::Vars, aux::Vars, (x1,x2,x3), t...) =  init_cfsites!(state::Vars, 
-                                                                           aux::Vars, 
-                                                                           (x1,x2,x3), 
-                                                                           t,
-                                                                           spl_temp,
-                                                                           spl_pfull,
-                                                                           spl_ucomp,
-                                                                           spl_vcomp,
-                                                                           spl_sphum)
-
   config = CLIMA.LES_Configuration("CFSite_Demo", N, resolution, xmax, ymax, zmax,
                                    init_cfsites!,
                                    solver_type=CLIMA.ExplicitSolverType(LSRK144NiegemannDiehlBusch),
@@ -158,8 +130,32 @@ function main()
     zmax = 6000
     t0 = FT(0)
     timeend = FT(0.2)
-    driver_config = config_cfsites(FT, N, resolution, xmax, ymax, zmax)
-    solver_config = CLIMA.setup_solver(t0, timeend, driver_config, forcecpu=true)
+
+    # CFSite Specific Information
+    initdata = get_ncdata()
+    
+    z = initdata[:,1];
+    pfull = initdata[:,2];
+    temp  = initdata[:,3];
+    ucomp = initdata[:,4];
+    vcomp = initdata[:,5];
+    sphum = initdata[:,6];
+
+    splines = (spl_temp = Spline1D(z,temp), 
+               spl_pfull=Spline1D(z,pfull), 
+               spl_ucomp=Spline1D(z,ucomp),
+               spl_vcomp=Spline1D(z,vcomp),
+               spl_sphum=Spline1D(z,sphum))
+
+    driver_config = config_cfsites(FT, 
+                                   N, resolution, 
+                                   xmax, ymax, zmax)
+
+    solver_config = CLIMA.setup_solver(t0, timeend, 
+                                       driver_config, 
+                                       extra_args=splines; 
+                                       forcecpu=true)
+    
     cbtmarfilter = GenericCallbacks.EveryXSimulationSteps(2) do (init=false)
         Filters.apply!(solver_config.Q, 6, solver_config.dg.grid, TMARFilter())
         nothing

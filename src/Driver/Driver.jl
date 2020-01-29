@@ -195,17 +195,18 @@ Set up the DG model per the specified driver configuration and set up the ODE so
 """
 function setup_solver(t0::FT, timeend::FT,
                       driver_config::DriverConfiguration;
-                      forcecpu=false,
                       ode_solver_type=nothing,
                       Courant_number=0.4,
-                      T=FT(290)
+                      T=FT(290),
+                      extra_args=nothing,
+                      forcecpu=false,
                      ) where {FT<:AbstractFloat}
     @tic setup_solver
 
     # create DG model, initialize ODE state
     dg = DGModel(driver_config.bl, driver_config.grid, driver_config.numfluxnondiff,
                  driver_config.numfluxdiff, driver_config.gradnumflux)
-    Q = init_ode_state(dg, FT(0), forcecpu=forcecpu)
+    Q = init_ode_state(dg, FT(0), extra_args; forcecpu=forcecpu)
 
     # if solver has been specified, use it
     if ode_solver_type !== nothing
@@ -293,7 +294,7 @@ function invoke!(solver_config::SolverConfiguration;
         cbdiagnostics = GenericCallbacks.EveryXSimulationSteps(DiagnosticsInterval) do (init=false)
             sim_time_str = string(ODESolvers.gettime(solver))
             gather_diagnostics(mpicomm, dg, Q, diagnostics_time_str, sim_time_str,
-                               OutputDir, ODESolvers.gettime(lsrk))
+                               OutputDir, ODESolvers.gettime(solver))
             nothing
         end
         callbacks = (callbacks..., cbdiagnostics)
@@ -351,9 +352,9 @@ function invoke!(solver_config::SolverConfiguration;
                    engf,
                    engf/eng0,
                    engf-eng0)
-
+    #=
     if check_euclidean_distance
-        Qe = init_ode_state(dg, timeend)
+        Qe = init_ode_state(dg, timeend, nothing; forcecpu=true)
         engfe = norm(Qe)
         errf = euclidean_distance(solver_config.Q, Qe)
         @info @sprintf("""Euclidean distance
@@ -362,6 +363,7 @@ function invoke!(solver_config::SolverConfiguration;
                        errf,
                        errf/engfe)
     end
+    =# 
 
     return engf / eng0
 end
