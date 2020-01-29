@@ -54,7 +54,7 @@ mutable struct GeneralizedMinimalResidual{M, MP1, MMP1, T, AT} <: LS.AbstractIte
     g0 = Vector{FT}(undef, M+1)
     fill!(g0, FT(0))
 
-    new{M, M + 1, M * (M + 1), FT, typeof(krylov_basis[1])}(krylov_basis, H, g0, (rtol, atol))
+    new{M, M + 1, M * (M + 1), FT, typeof(krylov_basis[1])}(krylov_basis, H, g0, rtol, atol)
   end
 end
 

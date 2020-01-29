@@ -57,7 +57,7 @@ mutable struct GeneralizedConjugateResidual{K, T, AT} <: LS.AbstractIterativeLin
     alpha = @MArray zeros(K)
     normsq = @MArray zeros(K)
 
-    new{K, T, AT}(residual, L_residual, p, L_p, alpha, normsq, (rtol, atol))
+    new{K, T, AT}(residual, L_residual, p, L_p, alpha, normsq, rtol, atol)
   end
 end
 
