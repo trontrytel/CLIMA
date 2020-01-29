@@ -26,7 +26,7 @@ end
 # ------------------------------------
 # ---------------- Get initial condition from NCData ------------------------------ # 
 function get_ncdata()
-  data = Dataset("./cfsites_forcing.2010071518.nc","r");
+  data = Dataset("/home/asridhar/CLIMA/datasets/cfsites_forcing.2010071518.nc","r");
   # Load specific site group via numeric ID in NetCDF file (requires generalisation)
   siteid = data.group["site22"];
   # Allow strings to be read as varnames
@@ -60,24 +60,22 @@ DOI = {10.5194/gmd-10-359-2017}
 function init_cfsites!(state::Vars, 
                             aux::Vars, 
                             (x1,x2,x3), 
-                            t)
+                            t,
+                            spl_temp,
+                            spl_pfull,
+                            spl_ucomp,
+                            spl_vcomp,
+                            spl_sphum)
 
-  
   # Interpolate from CFSite Data
   FT = eltype(state)
 
-#  T     = FT(spl_temp(x3))
-#  q_tot = FT(spl_sphum(x3))
-#  u     = FT(spl_ucomp(x3))
-#  v     = FT(spl_vcomp(x3))
-#  P     = FT(spl_pfull(x3))
+  T     = FT(spl_temp(x3))
+  q_tot = FT(spl_sphum(x3))
+  u     = FT(spl_ucomp(x3))
+  v     = FT(spl_vcomp(x3))
+  P     = FT(spl_pfull(x3))
 
-  T     = FT(289)
-  q_tot = FT(0) 
-  u     = FT(0)
-  v     = FT(0)
-  P     = FT(MSLP)
-  
   ρ     = air_density(T,P,PhasePartition(q_tot))
   e_int = internal_energy(T,PhasePartition(q_tot))
   e_kin = (u^2 + v^2)/2  
@@ -124,6 +122,16 @@ function config_cfsites(FT, N, resolution, xmax, ymax, zmax)
   spl_vcomp = Spline1D(z,vcomp)
   spl_sphum = Spline1D(z,sphum)
 
+  init_cfsites!(state::Vars, aux::Vars, (x1,x2,x3), t...) =  init_cfsites!(state::Vars, 
+                                                                           aux::Vars, 
+                                                                           (x1,x2,x3), 
+                                                                           t,
+                                                                           spl_temp,
+                                                                           spl_pfull,
+                                                                           spl_ucomp,
+                                                                           spl_vcomp,
+                                                                           spl_sphum)
+
   config = CLIMA.LES_Configuration("CFSite_Demo", N, resolution, xmax, ymax, zmax,
                                    init_cfsites!,
                                    solver_type=CLIMA.ExplicitSolverType(LSRK144NiegemannDiehlBusch),
@@ -145,9 +153,9 @@ function main()
     Δh = FT(200)
     Δv = FT(100)
     resolution = (Δh, Δh, Δv)
-    xmax = FT(9600)  
-    ymax = FT(9600)
-    zmax = FT(6000)
+    xmax = 9600
+    ymax = 9600
+    zmax = 6000
     t0 = FT(0)
     timeend = FT(0.2)
     driver_config = config_cfsites(FT, N, resolution, xmax, ymax, zmax)
@@ -163,8 +171,5 @@ function main()
     result = CLIMA.invoke!(solver_config;
                           user_callbacks=(cbtmarfilter,cbinformation),
                           check_euclidean_distance=true)
-    @testset begin
-        @test result ≈ FT(0.9999734954176608)
-    end
 end
 main()
