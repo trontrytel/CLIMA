@@ -37,14 +37,15 @@ This uses the restarted Generalized Conjugate Residual method of Eisenstat (1983
       publisher={SIAM}
     }
 """
-struct GeneralizedConjugateResidual{K, T, AT} <: LS.AbstractIterativeLinearSolver
+mutable struct GeneralizedConjugateResidual{K, T, AT} <: LS.AbstractIterativeLinearSolver
   residual::AT
   L_residual::AT
   p::NTuple{K, AT}
   L_p::NTuple{K, AT}
   alpha::MArray{Tuple{K}, T, 1, K}
   normsq::MArray{Tuple{K}, T, 1, K}
-  tolerances::MArray{Tuple{2}, T, 1, 2}
+  rtol::T
+  atol::T
 
   function GeneralizedConjugateResidual(K, Q::AT; rtol=√eps(eltype(AT)), atol=eps(eltype(AT))) where AT
     T = eltype(Q)
@@ -70,7 +71,7 @@ function LS.initialize!(linearoperator!, Q, Qrhs,
 
     @assert size(Q) == size(residual)
 
-    threshold = solver.tolerances[1] * norm(Qrhs, weighted)
+    threshold = solver.rtol * norm(Qrhs, weighted)
     linearoperator!(residual, Q, args...)
     residual .-= Qrhs
 

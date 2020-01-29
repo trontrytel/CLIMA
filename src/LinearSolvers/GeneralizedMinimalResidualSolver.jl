@@ -12,12 +12,12 @@ using StaticArrays
 using GPUifyLoops
 
 """
-    GeneralizedMinimalResidual(M, Q, tolerance)
+    GeneralizedMinimalResidual(Q; M, rtol, atol)
 
 This is an object for solving linear systems using an iterative Krylov method.
 The constructor parameter `M` is the number of steps after which the algorithm
 is restarted (if it has not converged), `Q` is a reference state used only
-to allocate the solver internal state, and `tolerance` specifies the convergence
+to allocate the solver internal state, and `rtol` specifies the convergence
 criterion based on the relative residual norm. The amount of memory
 required for the solver state is roughly `(M + 1) * size(Q)`.
 This object is intended to be passed to the [`linearsolve!`](@ref) command.
@@ -36,13 +36,14 @@ This uses the restarted Generalized Minimal Residual method of Saad and Schultz 
       publisher={SIAM}
     }
 """
-struct GeneralizedMinimalResidual{M, MP1, MMP1, T, AT} <: LS.AbstractIterativeLinearSolver
+mutable struct GeneralizedMinimalResidual{M, MP1, MMP1, T, AT} <: LS.AbstractIterativeLinearSolver
   krylov_basis::NTuple{MP1, AT}
   "Hessenberg matrix"
   H::Matrix{T}
   "rhs of the least squares problem"
   g0::Vector{T}
-  tolerances::MArray{Tuple{2}, T, 1, 2}
+  rtol::T
+  atol::T
 
   function GeneralizedMinimalResidual(Q::AT; M=min(20, eltype(Q)), rtol=√eps(eltype(AT)),
                                       atol=eps(eltype(AT))) where AT
@@ -63,6 +64,7 @@ function LS.initialize!(linearoperator!, Q, Qrhs,
                         solver::GeneralizedMinimalResidual, args...)
     g0 = solver.g0
     krylov_basis = solver.krylov_basis
+    rtol, atol = solver.rtol, solver.atol
 
     @assert size(Q) == size(krylov_basis[1])
 
@@ -70,8 +72,6 @@ function LS.initialize!(linearoperator!, Q, Qrhs,
     linearoperator!(krylov_basis[1], Q, args...)
     krylov_basis[1] .*= -1
     krylov_basis[1] .+= Qrhs
-
-    rtol, atol = solver.tolerances
 
     threshold = rtol * norm(krylov_basis[1], weighted)
     residual_norm = norm(krylov_basis[1], weighted)

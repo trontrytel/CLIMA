@@ -17,7 +17,7 @@ LinearAlgebra.norm(A::AbstractVector, p::Real, weighted::Bool) = norm(A, p)
 LinearAlgebra.norm(A::AbstractVector, weighted::Bool) = norm(A, 2, weighted)
 LinearAlgebra.dot(A::AbstractVector, B::AbstractVector, weighted) = dot(A, B)
 
-export linearsolve!, setrtolerance!, prefactorize
+export linearsolve!, settolerance!, prefactorize
 export AbstractLinearSolver, AbstractIterativeLinearSolver
 
 """
@@ -41,12 +41,13 @@ The available concrete implementations are:
 abstract type AbstractIterativeLinearSolver <: AbstractLinearSolver end
 
 """
-    setrtolerance!(solver::AbstractIterativeLinearSolver, rtol)
+    settolerance!(solver::AbstractIterativeLinearSolver, tolerance, relative)
 
-Sets the relative tolerance of the iterative linear solver `solver` to `rtol`.
+Sets the relative or absolute tolerance of the iterative linear solver
+`solver` to `tolerance`.
 """
-setrtolerance!(solver::AbstractIterativeLinearSolver, rtol) =
-  (solver.tolerances[1] = rtol)
+settolerance!(solver::AbstractIterativeLinearSolver, tolerance, relative=true) =
+  (relative ? (solver.rtol = rtol) : (solver.atol = atol))
 
 doiteration!(linearoperator!, Q, Qrhs, solver::AbstractIterativeLinearSolver,
              tolerance, args...) =
@@ -97,7 +98,7 @@ function linearsolve!(linearoperator!, solver::AbstractIterativeLinearSolver, Q,
       error("norm of residual is not finite after $iters iterations of `doiteration!`")
     end
 
-    achieved_tolerance = residual_norm / threshold * solver.tolerances[1]
+    achieved_tolerance = residual_norm / threshold * solver.rtol
   end
 
   converged || @warn "Solver did not attain convergence after $iters iterations"

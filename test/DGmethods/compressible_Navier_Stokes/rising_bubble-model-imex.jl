@@ -126,7 +126,7 @@ function run(mpicomm, LinearType,
 
   Q = init_ode_state(dg, FT(0))
 
-  linearsolver = GeneralizedMinimalResidual(10, Q, sqrt(eps(FT)))
+  linearsolver = GeneralizedMinimalResidual(Q; M=10, rtol=sqrt(eps(FT)))
   ark = ARK548L2SA2KennedyCarpenter(dg, lindg, linearsolver, Q; dt = dt, t0 = 0)
 
 
