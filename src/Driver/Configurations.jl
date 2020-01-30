@@ -27,7 +27,7 @@ struct IMEXSolverType <: AbstractSolverType
     linear_solver::Type
     solver_method::Function
     function IMEXSolverType(linear_model=AtmosAcousticGravityLinearModel,
-                            linear_solver=SingleColumnLU,
+                            linear_solver=ManyColumnLU,
                             solver_method=ARK2GiraldoKellyConstantinescu)
         new(linear_model, linear_solver, solver_method)
     end
