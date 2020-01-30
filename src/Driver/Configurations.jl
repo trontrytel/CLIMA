@@ -104,6 +104,16 @@ function LES_Configuration(name::String,
                            numfluxdiff    = CentralNumericalFluxDiffusive(),
                            gradnumflux    = CentralNumericalFluxGradient()
                           ) where {FT<:AbstractFloat}
+    @info @sprintf("""Establishing Atmos LES configuration for %s
+                   polynomial order = %d
+                   grid             = %dx%dx%d
+                   resolution       = %dx%dx%d
+                   MPI ranks        = %d""",
+                   name, N,
+                   xmax, ymax, zmax,
+                   Δx, Δy, Δz,
+                   MPI.Comm_size(mpicomm))
+
     model = AtmosModel(orientation, ref_state, turbulence, moisture,
                        precipitation, radiation, subsidence, sources, bc, init_LES!)
 
@@ -154,6 +164,16 @@ function GCM_Configuration(name::String,
                            numfluxdiff        = CentralNumericalFluxDiffusive(),
                            gradnumflux        = CentralNumericalFluxGradient()
                           ) where {FT<:AbstractFloat}
+    @info @sprintf("""Establishing Atmos GCM configuration for %s
+                   polynomial order = %d
+                   #horiz elems     = %d
+                   #vert_elems      = %d
+                   domain height    = %.2e
+                   MPI ranks        = %d""",
+                   name, N,
+                   nelem_horz, nelem_vert, domain_height,
+                   MPI.Comm_size(mpicomm))
+
     model = AtmosModel(orientation, ref_state, turbulence, moisture,
                        precipitation, radiation, subsidence, sources, bc, init_GCM!)
 

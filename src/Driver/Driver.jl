@@ -195,6 +195,7 @@ struct SolverConfiguration{FT}
     timeend::FT
     dt::FT
     forcecpu::Bool
+    numberofsteps::Int
     solver
 end
 
@@ -207,6 +208,7 @@ function setup_solver(t0::FT, timeend::FT,
                       driver_config::DriverConfiguration;
                       forcecpu=false,
                       ode_solver_type=nothing,
+                      ode_dt=nothing,
                       Courant_number=0.4,
                       T=FT(290)
                      ) where {FT<:AbstractFloat}
@@ -227,16 +229,24 @@ function setup_solver(t0::FT, timeend::FT,
 
     if isa(solver_type, ExplicitSolverType)
 
-        dt = Courant_number * min_node_distance(dg.grid, VerticalDirection()) / soundspeed_air(T)
-        numberofsteps = convert(Int64, cld(timeend, dt))
+        if ode_dt !== nothing
+            dt = ode_dt
+        else
+            dt = Courant_number * min_node_distance(dg.grid, VerticalDirection()) / soundspeed_air(T)
+        end
+        numberofsteps = convert(Int, cld(timeend, dt))
         dt = timeend / numberofsteps
 
         solver = solver_type.solver_method(dg, Q; dt=dt, t0=t0)
 
     else # solver_type === IMEXSolverType
 
-        dt = Courant_number * min_node_distance(dg.grid, HorizontalDirection()) / soundspeed_air(T)
-        numberofsteps = convert(Int64, cld(timeend, dt))
+        if ode_dt !== nothing
+            dt = ode_dt
+        else
+            dt = Courant_number * min_node_distance(dg.grid, HorizontalDirection()) / soundspeed_air(T)
+        end
+        numberofsteps = convert(Int, cld(timeend, dt))
         dt = timeend / numberofsteps
 
         linmodel = solver_type.linear_model(driver_config.bl)
@@ -251,7 +261,7 @@ function setup_solver(t0::FT, timeend::FT,
     @toc setup_solver
 
     return SolverConfiguration(driver_config.name, driver_config.mpicomm, dg, Q,
-                               t0, timeend, dt, forcecpu, solver)
+                               t0, timeend, dt, forcecpu, numberofsteps, solver)
 end
 
 """
@@ -298,12 +308,17 @@ function invoke!(solver_config::SolverConfiguration;
         callbacks = (callbacks..., cbinfo)
     end
     if Settings.enable_diagnostics
-        # set up diagnostics callback
-        diagnostics_time_str = replace(string(now()), ":" => ".")
+        # set up diagnostics to be collected via callback
         cbdiagnostics = GenericCallbacks.EveryXSimulationSteps(Settings.diagnostics_interval) do (init=false)
-            sim_time_str = string(ODESolvers.gettime(solver))
-            gather_diagnostics(mpicomm, dg, Q, diagnostics_time_str, sim_time_str,
-                               Settings.output_dir, ODESolvers.gettime(solver))
+            if init
+                starttime = replace(string(now()), ":" => ".")
+                Diagnostics.init(mpicomm, dg, Q, starttime, Settings.output_dir)
+            end
+            currtime = ODESolvers.gettime(solver)
+            @info @sprintf("""Diagnostics
+                           collecting at %s""",
+                           string(currtime))
+            Diagnostics.collect(currtime)
             nothing
         end
         callbacks = (callbacks..., cbdiagnostics)
@@ -339,12 +354,14 @@ function invoke!(solver_config::SolverConfiguration;
     # initial condition norm
     eng0 = norm(Q)
     @info @sprintf("""Starting %s
-                   dt                      = %.5e
-                   timeend                 = %.5e
-                   norm(Q)                 = %.16e""",
+                   dt              = %.5e
+                   timeend         = %.5e
+                   number of steps = %d
+                   norm(Q)         = %.16e""",
                    solver_config.name,
                    solver_config.dt,
                    solver_config.timeend,
+                   solver_config.numberofsteps,
                    eng0)
 
     # run the simulation
@@ -355,9 +372,9 @@ function invoke!(solver_config::SolverConfiguration;
     engf = norm(solver_config.Q)
 
     @info @sprintf("""Finished
-                   norm(Q)                 = %.16e
-                   norm(Q) / norm(Q₀)      = %.16e
-                   norm(Q) - norm(Q₀)      = %.16e""",
+                   norm(Q)            = %.16e
+                   norm(Q) / norm(Q₀) = %.16e
+                   norm(Q) - norm(Q₀) = %.16e""",
                    engf,
                    engf/eng0,
                    engf-eng0)
