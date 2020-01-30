@@ -8,6 +8,7 @@ using Printf
 using Requires
 
 using ..AdditiveRungeKuttaMethod
+using ..VTK
 using ..Atmos
 using ..ColumnwiseLUSolver
 using ..Diagnostics
@@ -313,11 +314,11 @@ function invoke!(solver_config::SolverConfiguration;
         # set up VTK output callback
         step = [0]
         cbvtk = GenericCallbacks.EveryXSimulationSteps(Settings.vtk_interval) do (init=false)
-            vprefix = @sprintf("%s_%dD_mpirank%04d_step%04d", solver_config.name, dim,
+            vprefix = @sprintf("%s_mpirank%04d_step%04d", solver_config.name,
                                MPI.Comm_rank(mpicomm), step[1])
             outprefix = joinpath(Settings.output_dir, vprefix)
-            statenames = flattenednames(vars_state(bl, FT))
-            auxnames = flattenednames(vars_aux(bl, FT))
+            statenames = Atmos.flattenednames(Atmos.vars_state(bl, FT))
+            auxnames = Atmos.flattenednames(Atmos.vars_aux(bl, FT))
             writevtk(outprefix, Q, dg, statenames, dg.auxstate, auxnames)
             # Generate the pvtu file for these vtk files
             if MPI.Comm_rank(mpicomm) == 0

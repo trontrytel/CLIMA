@@ -5,7 +5,7 @@ using Test
 using Printf
 using NCDatasets
 using Dierckx
-# ------------------------------------
+
 using CLIMA
 using CLIMA.Atmos
 using CLIMA.GenericCallbacks
@@ -14,17 +14,18 @@ using CLIMA.Mesh.Filters
 using CLIMA.MoistThermodynamics
 using CLIMA.PlanetParameters
 using CLIMA.VariableTemplates
-# ------------------------------------
+
 const ArrayType = CLIMA.array_type()
-# ------------------------------------
+
 if !@isdefined integration_testing
   const integration_testing =
     parse(Bool, lowercase(get(ENV,"JULIA_CLIMA_INTEGRATION_TESTING","false")))
 end
 
 
-# ------------------------------------
-# ---------------- Get initial condition from NCData ------------------------------ # 
+#
+# Get initial condition from NCData 
+#
 function get_ncdata()
   data = Dataset("/home/asridhar/CLIMA/datasets/cfsites_forcing.2010071518.nc","r");
   # Load specific site group via numeric ID in NetCDF file (requires generalisation)
@@ -41,8 +42,9 @@ function get_ncdata()
   initdata = [height pfull temp ucomp vcomp sphum]
   return initdata
 end
-
-# ------------- Initial condition function ----------- #
+#
+# Initial condition function
+#
 """
 CMIP6 Test Dataset - cfsites
 @Article{gmd-10-359-2017,
@@ -57,6 +59,7 @@ URL = {https://www.geosci-model-dev.net/10/359/2017/},
 DOI = {10.5194/gmd-10-359-2017}
 }
 """
+const seed = MersenneTwister(0)
 function init_cfsites!(state::Vars, 
                             aux::Vars, 
                             (x1,x2,x3), 
@@ -82,6 +85,9 @@ function init_cfsites!(state::Vars,
   state.ρ = ρ
   state.ρu = ρ * SVector(u,v,0)
   state.ρe = ρ * (e_kin + e_pot + e_int)
+  if x3 <= FT(500)
+    state.ρe += rand(seed)*FT(2/100)*(state.ρe)
+  end
   state.moisture.ρq_tot = ρ * q_tot
 end
 
@@ -156,7 +162,7 @@ function main()
                                        extra_args=splines; 
                                        forcecpu=true)
     
-    cbtmarfilter = GenericCallbacks.EveryXSimulationSteps(2) do (init=false)
+    cbtmarfilter = GenericCallbacks.EveryXSimulationSteps(1) do (init=false)
         Filters.apply!(solver_config.Q, 6, solver_config.dg.grid, TMARFilter())
         nothing
     end
