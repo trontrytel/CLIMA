@@ -1,5 +1,5 @@
 using CLIMA.PlanetParameters
-export PeriodicBC, NoFluxBC, InitStateBC, DYCOMS_BC, RayleighBenardBC
+export PeriodicBC, NoFluxBC, InitStateBC, DYCOMS_BC, RayleighBenardBC, SurfaceDrivenBubbleBC
 
 function atmos_boundary_flux_diffusive!(nf::CentralNumericalFluxDiffusive, bc,
                                         atmos::AtmosModel, F⁺, state⁺, diff⁺,
@@ -290,4 +290,71 @@ function atmos_boundary_state!(::CentralNumericalFluxDiffusive, bc::RayleighBena
     diffP.∇h_tot = SVector(diffP.∇h_tot[1], diffP.∇h_tot[2], FT(0))
     nothing
   end
+end
+
+
+"""
+  SurfaceDrivenBubbleBC <: BoundaryCondition
+
+# Fields
+$(DocStringExtensions.FIELDS)
+"""
+struct SurfaceDrivenBubbleBC{FT} <: BoundaryCondition
+  "Prescribed MSEF Magnitude [W/m^2]"
+  F₀::FT
+  "Spatial Parameter [m]"
+  σ::FT
+  "Surface Heater Radius [m]"
+  a::FT
+  "Surface Heater Center [m]"
+  x₀::FT
+  "Time Cutoff [s]"
+  t₀::FT
+end
+function atmos_boundary_state!(::Rusanov, bc::SurfaceDrivenBubbleBC, 
+                               m::AtmosModel,
+                               Y⁺::Vars, 
+                               α⁺::Vars, 
+                               n⁻, 
+                               Y⁻::Vars,
+                               α⁻::Vars, 
+                               bctype, t,_...)
+  FT = eltype(Y⁺)
+  @inbounds begin
+    Y⁺.ρ = Y⁻.ρ
+    Y⁺.ρu = -SVector(n⁻) + 2*dot(Y⁻.ρu, n⁻)*SVector(n⁻)
+    Y⁺.ρe = Y⁻.ρe
+  end
+  nothing
+end
+
+function atmos_boundary_state!(::CentralNumericalFluxDiffusive, bc::SurfaceDrivenBubbleBC,
+                               m::AtmosModel, 
+                               Y⁺::Vars, 
+                               Σ⁺::Vars,
+                               α⁺::Vars, 
+                               n⁻, 
+                               Y⁻::Vars, 
+                               Σ⁻::Vars,
+                               α⁻::Vars, 
+                               bctype, t, _...)
+  FT = eltype(Y⁻)
+  r = sqrt((α⁻.coord[1]-bc.x₀)^2 + (α⁻.coord[2]-bc.x₀)^2) 
+  
+  F₀ =  bc.F₀*(1-sign(t-bc.t₀))
+
+  @inbounds begin
+    if r > bc.a 
+      MSEF      = F₀ * exp(-(r-bc.a)^2 / bc.σ^2)
+      Σ⁺.∇h_tot = SVector{3,FT}(Σ⁻.∇h_tot[1],
+                                Σ⁻.∇h_tot[2],
+                                MSEF)
+    else
+      MSEF      = F₀
+      Σ⁺.∇h_tot = SVector{3,FT}(Σ⁻.∇h_tot[1],
+                                Σ⁻.∇h_tot[2],
+                                MSEF)
+    end
+  end
+  nothing
 end

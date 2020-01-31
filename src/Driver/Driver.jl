@@ -9,6 +9,7 @@ using Requires
 
 using ..AdditiveRungeKuttaMethod
 using ..Atmos
+using ..VTK
 using ..ColumnwiseLUSolver
 using ..Diagnostics
 using ..GenericCallbacks
@@ -263,14 +264,14 @@ function invoke!(solver_config::SolverConfiguration;
                  user_callbacks=(),
                  check_euclidean_distance=false,
                  adjustfinalstep=false
-                ) where {FT<:AbstractFloat}
+                ) 
     mpicomm = solver_config.mpicomm
     dg = solver_config.dg
     bl = dg.balancelaw
     Q = solver_config.Q
     timeend = solver_config.timeend
     solver = solver_config.solver
-
+    FT = eltype(Q)
     # set up callbacks
     callbacks = ()
     if Settings.show_updates
@@ -311,11 +312,11 @@ function invoke!(solver_config::SolverConfiguration;
         # set up VTK output callback
         step = [0]
         cbvtk = GenericCallbacks.EveryXSimulationSteps(Settings.vtk_interval) do (init=false)
-            vprefix = @sprintf("%s_%dD_mpirank%04d_step%04d", solver_config.name, dim,
+            vprefix = @sprintf("%s_mpirank%04d_step%04d", solver_config.name, 
                                MPI.Comm_rank(mpicomm), step[1])
             outprefix = joinpath(Settings.output_dir, vprefix)
-            statenames = flattenednames(vars_state(bl, FT))
-            auxnames = flattenednames(vars_aux(bl, FT))
+            statenames = Atmos.flattenednames(Atmos.vars_state(bl, FT))
+            auxnames = Atmos.flattenednames(Atmos.vars_aux(bl, FT))
             writevtk(outprefix, Q, dg, statenames, dg.auxstate, auxnames)
             # Generate the pvtu file for these vtk files
             if MPI.Comm_rank(mpicomm) == 0
@@ -331,7 +332,7 @@ function invoke!(solver_config::SolverConfiguration;
             step[1] += 1
             nothing
         end
-        callbacks = (callbacks..., cbdiagnostics)
+        callbacks = (callbacks..., cbvtk)
     end
     callbacks = (callbacks..., user_callbacks...)
 
