@@ -208,7 +208,7 @@ function setup_solver(t0::FT, timeend::FT,
                       ode_solver_type=nothing,
                       Courant_number=0.4,
                       T=FT(290),
-                      extra_args=nothing,
+                      init_args=nothing,
                       forcecpu=false,
                      ) where {FT<:AbstractFloat}
     @tic setup_solver
@@ -216,7 +216,7 @@ function setup_solver(t0::FT, timeend::FT,
     # create DG model, initialize ODE state
     dg = DGModel(driver_config.bl, driver_config.grid, driver_config.numfluxnondiff,
                  driver_config.numfluxdiff, driver_config.gradnumflux)
-    Q = init_ode_state(dg, FT(0), extra_args; forcecpu=forcecpu)
+    Q = init_ode_state(dg, FT(0), init_args; forcecpu=forcecpu)
 
     # if solver has been specified, use it
     if ode_solver_type !== nothing
