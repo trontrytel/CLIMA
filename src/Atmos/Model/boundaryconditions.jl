@@ -309,7 +309,7 @@ struct SurfaceDrivenBubbleBC{FT} <: BoundaryCondition
   "Surface Heater Center [m]"
   x₀::FT
   "Time Cutoff [s]"
-  t₀::FT
+  t₁::FT
 end
 function atmos_boundary_state!(::Rusanov, bc::SurfaceDrivenBubbleBC, 
                                m::AtmosModel,
@@ -321,9 +321,9 @@ function atmos_boundary_state!(::Rusanov, bc::SurfaceDrivenBubbleBC,
                                bctype, t,_...)
   FT = eltype(Y⁺)
   @inbounds begin
-    Y⁺.ρ = Y⁻.ρ
-    Y⁺.ρu = -SVector(n⁻) + 2*dot(Y⁻.ρu, n⁻)*SVector(n⁻)
-    Y⁺.ρe = Y⁻.ρe
+    # Momentum b.c. prescribed (no flow across wall boundary)
+    Y_bc  = dot(Y⁻.ρu, n⁻)*SVector(n⁻)
+    Y⁺.ρu = -Y⁻.ρu + 2*Y_bc
   end
   nothing
 end
@@ -339,22 +339,27 @@ function atmos_boundary_state!(::CentralNumericalFluxDiffusive, bc::SurfaceDrive
                                α⁻::Vars, 
                                bctype, t, _...)
   FT = eltype(Y⁻)
-  r = sqrt((α⁻.coord[1]-bc.x₀)^2 + (α⁻.coord[2]-bc.x₀)^2) 
+  k̂  = α⁻.orientation.∇Φ / norm(α⁻.orientation.∇Φ)  
   
-  F₀ =  bc.F₀*(1-sign(t-bc.t₀))
+  r = sqrt((α⁻.coord[1]-bc.x₀)^2 + (α⁻.coord[2]-bc.x₀)^2) 
+
+  F₀ =  bc.F₀*(1 - sign(t-bc.t₁))/2 
 
   @inbounds begin
-    if r > bc.a 
-      MSEF      = F₀ * exp(-(r-bc.a)^2 / bc.σ^2)
-      Σ⁺.∇h_tot = SVector{3,FT}(Σ⁻.∇h_tot[1],
-                                Σ⁻.∇h_tot[2],
-                                MSEF)
-    else
-      MSEF      = F₀
-      Σ⁺.∇h_tot = SVector{3,FT}(Σ⁻.∇h_tot[1],
-                                Σ⁻.∇h_tot[2],
-                                MSEF)
+    # Momentum b.c. prescribed (no flow across wall boundary)
+    Y_bc  = dot(Y⁻.ρu, n⁻)*SVector(n⁻)
+    Y⁺.ρu = -Y⁻.ρu + 2*Y_bc
+    # Energy flux b.c. prescribed (diffusive flux through bottom wall)
+    if bctype == 1
+      if r > bc.a 
+        MSEF      = F₀ * exp(-(r-bc.a)^2 / bc.σ^2)
+        Σ⁺.∇h_tot = MSEF * k̂
+      else
+        MSEF      = F₀
+        Σ⁺.∇h_tot = MSEF * k̂
+      end
     end
   end
   nothing
 end
+
