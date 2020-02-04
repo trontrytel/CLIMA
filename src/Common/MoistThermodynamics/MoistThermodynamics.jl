@@ -145,7 +145,7 @@ The isobaric specific heat capacity of moist
 air where, optionally,
  - `q` [`PhasePartition`](@ref). Without this argument, the results are for dry air.
 """
-@uaware cp_m(q::PhasePartition{FT}) where {FT<:Real} =
+cp_m(q::PhasePartition{FT}) where {FT<:Real} = # FIXME: Careful with this one - @uaware will not work
   FT(cp_d) + (FT(cp_v) - FT(cp_d))*q.tot + (FT(cp_l) - FT(cp_v))*q.liq + (FT(cp_i) - FT(cp_v))*q.ice
 cp_m(::Type{FT}) where {FT<:Real} = cp_m(q_pt_0(FT))
 

@@ -120,7 +120,9 @@ macro uaware(ex)
       Base.@__doc__ $def_unitful
                     $def_unitless # unitless goes next - overriding where no input parameters changed
     end
-    #= @show prettify(q) =#
+    if f===:exner_given_pressure
+        @show prettify(q)
+    end
     return esc(q)
   end
 
