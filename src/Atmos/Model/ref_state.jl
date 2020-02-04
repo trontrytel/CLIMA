@@ -48,7 +48,7 @@ vars_aux(m::HydrostaticState, FT) = @vars begin
 end
 
 
-@uaware function atmos_init_aux!(m::HydrostaticState{P,F}, atmos::AtmosModel, aux::Vars, geom::LocalGeometry) where {P,F}
+function atmos_init_aux!(m::HydrostaticState{P,F}, atmos::AtmosModel, aux::Vars, geom::LocalGeometry) where {P,F}
   FT = eltype(aux)
   T,p = m.temperatureprofile(atmos.orientation, aux)
   aux.ref_state.T = T

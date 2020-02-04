@@ -55,7 +55,7 @@ include("states.jl")
 The specific gas constant of moist air given
  - `q` [`PhasePartition`](@ref). Without this argument, the results are for dry air.
 """
-@uaware gas_constant_air(q::PhasePartition{FT}) where {FT<:Real} =
+gas_constant_air(q::PhasePartition{FT}) where {FT<:Real} = #FIXME Going to be problematic...
   FT(R_d) * ( 1 +  (FT(molmass_ratio) - 1)*q.tot - FT(molmass_ratio)*(q.liq + q.ice) )
 gas_constant_air(::Type{FT}) where {FT<:Real} = gas_constant_air(q_pt_0(FT))
 
@@ -67,7 +67,7 @@ a thermodynamic state `ts`.
 """
 gas_constant_air(ts::ThermodynamicState) =
   gas_constant_air(PhasePartition(ts))
-@uaware gas_constant_air(ts::PhaseDry{FT}) where {FT<:Real} = FT(R_d)
+gas_constant_air(ts::PhaseDry{FT}) where {FT<:Real} = FT(R_d)
 
 """
     vapor_specific_humidity(q::PhasePartition{FT})
