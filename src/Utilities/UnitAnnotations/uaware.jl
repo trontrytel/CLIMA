@@ -109,6 +109,7 @@ macro uaware(ex)
       Base.eval(__module__, s) |> getval |> ustrip
     end
 
+    @assert params_unitless !== params_unitful
     def_unitless = :($f($(params_unitless...)) where {$(Ts...)} = $body_unitless)
     def_unitful  = :($f($(params_unitful... )) where {$(Ts...)} = $body)
 

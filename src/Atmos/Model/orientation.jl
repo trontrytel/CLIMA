@@ -20,9 +20,9 @@ end
 
 gravitational_potential(::Orientation, aux::Vars) = aux.orientation.Φ
 ∇gravitational_potential(::Orientation, aux::Vars) = aux.orientation.∇Φ
-@uaware altitude(orientation::Orientation, aux::Vars) =
+altitude(orientation::Orientation, aux::Vars) = #FIXME
   (gp = gravitational_potential(orientation, aux); gp / numtype(gp)(grav)) #FIXME
-@uaware vertical_unit_vector(orientation::Orientation, aux::Vars) = ∇gravitational_potential(orientation, aux) / grav
+vertical_unit_vector(orientation::Orientation, aux::Vars) = ∇gravitational_potential(orientation, aux) / grav #FIXME
 
 
 """
@@ -38,7 +38,7 @@ end
 atmos_init_aux!(::NoOrientation, ::AtmosModel, aux::Vars, geom::LocalGeometry) = nothing
 gravitational_potential(::NoOrientation, aux::Vars) = -zero(eltype(aux)) * unit_alias(:gravpot)
 ∇gravitational_potential(::NoOrientation, aux::Vars) = SVector{3,eltype(aux)}(0,0,0) * unit_alias(:accel)
-altitude(orientation::NoOrientation, aux::Vars) = -zero(eltype(aux))
+altitude(orientation::NoOrientation, aux::Vars) = -zero(eltype(aux)) * unit_alias(:space)
 
 """
     SphericalOrientation <: Orientation

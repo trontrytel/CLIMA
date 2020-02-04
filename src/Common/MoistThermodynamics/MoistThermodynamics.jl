@@ -570,7 +570,7 @@ Compute the saturation specific humidity, given
  - `ρ` (moist-)air density
  - `p_v_sat` saturation vapor pressure
 """
-q_vap_saturation_from_pressure(T::U(FT,:temperature), ρ::U(FT,:density), p_v_sat::U(FT,:pressure)) where {FT<:AbstractFloat} =
+@uaware q_vap_saturation_from_pressure(T::U(FT,:temperature), ρ::U(FT,:density), p_v_sat::U(FT,:pressure)) where {FT<:Real} =
   p_v_sat / (ρ * FT(R_v) * T)
 
 """
@@ -587,7 +587,7 @@ and the saturation specific humidity in equilibrium, and it is defined to be
 nonzero only if this difference is positive.
 """
 saturation_excess(T::U(FT,:temperature), ρ::U(FT,:density), q::PhasePartition{FT}) where {FT<:Real} =
-  max(0, q.tot - q_vap_saturation(T, ρ, q))
+  max(FT(0), q.tot - q_vap_saturation(T, ρ, q))
 
 """
     saturation_excess(ts::ThermodynamicState)
@@ -689,7 +689,7 @@ using Newtons method with analytic gradients.
 
 See also [`saturation_adjustment`](@ref).
 """
-function saturation_adjustment_NewtonsMethod(e_int::U(FT,:energypv), ρ::U(FT,:density), q_tot::FT, tol::FT, maxiter::Int) where {FT<:AbstractFloat}
+function saturation_adjustment_NewtonsMethod(e_int::U(FT,:energypv), ρ::U(FT,:density), q_tot::FT, tol::FT, maxiter::Int) where {FT<:Real}
   T_1 = max(FT(T_min), air_temperature(e_int, PhasePartition(q_tot))) # Assume all vapor
   q_v_sat = q_vap_saturation(T_1, ρ)
   unsaturated = q_tot <= q_v_sat
@@ -750,7 +750,7 @@ by finding the root of
 
 See also [`saturation_adjustment_q_tot_θ_liq_ice`](@ref).
 """
-@uaware function saturation_adjustment(e_int::U(FT,:gravpot), ρ::U(FT,:density), q_tot::FT, tol::FT, maxiter::Int) where {FT<:AbstractFloat}
+@uaware function saturation_adjustment(e_int::U(FT,:gravpot), ρ::U(FT,:density), q_tot::FT, tol::FT, maxiter::Int) where {FT<:Real}
   T_1 = max(FT(T_min), air_temperature(e_int, PhasePartition(q_tot))) # Assume all vapor
   q_v_sat = q_vap_saturation(T_1, ρ)
   unsaturated = q_tot <= q_v_sat
@@ -789,7 +789,7 @@ by finding the root of
 
 See also [`saturation_adjustment`](@ref).
 """
-@uaware function saturation_adjustment_q_tot_θ_liq_ice(θ_liq_ice::U(FT,:temperature), ρ::U(FT,:density), q_tot::FT, tol::FT, maxiter::Int) where {FT<:AbstractFloat}
+@uaware function saturation_adjustment_q_tot_θ_liq_ice(θ_liq_ice::U(FT,:temperature), ρ::U(FT,:density), q_tot::FT, tol::FT, maxiter::Int) where {FT<:Real}
   T_1 = air_temperature_from_liquid_ice_pottemp(θ_liq_ice, ρ, PhasePartition(q_tot)) # Assume all vapor
   q_v_sat = q_vap_saturation(T_1, ρ)
   unsaturated = q_tot <= q_v_sat
@@ -827,7 +827,7 @@ by finding the root of
 
 See also [`saturation_adjustment`](@ref).
 """
-@uaware function saturation_adjustment_q_tot_θ_liq_ice_given_pressure(θ_liq_ice::U(FT,:temperature), p::U(FT,:pressure), q_tot::FT, tol::FT, maxiter::Int) where {FT<:AbstractFloat}
+@uaware function saturation_adjustment_q_tot_θ_liq_ice_given_pressure(θ_liq_ice::U(FT,:temperature), p::U(FT,:pressure), q_tot::FT, tol::FT, maxiter::Int) where {FT<:Real}
   T_1 = air_temperature_from_liquid_ice_pottemp_given_pressure(θ_liq_ice, p, PhasePartition(q_tot)) # Assume all vapor
   ρ = air_density(T_1, p, PhasePartition(q_tot))
   q_v_sat = q_vap_saturation(T_1, ρ)
@@ -968,7 +968,7 @@ by finding the root of
 ``
 """
 @uaware function air_temperature_from_liquid_ice_pottemp_non_linear(θ_liq_ice::U(FT,:temperature), ρ::U(FT,:density), tol::FT, maxiter::Int,
-  q::PhasePartition{FT}=q_pt_0(FT)) where {FT<:AbstractFloat}
+  q::PhasePartition{FT}=q_pt_0(FT)) where {FT<:Real}
   sol = find_zero(
     T -> T - air_temperature_from_liquid_ice_pottemp_given_pressure(θ_liq_ice, air_pressure(T, ρ, q), q),
     FT(T_min), FT(T_max), SecantMethod(), CompactSolution(), tol, maxiter)
