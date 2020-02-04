@@ -256,7 +256,7 @@ function run_cubed_sphere_interpolation_test()
     return l_infinity_domain < 1.0e-12
 end
 #----------------------------------------------------------------------------
-function (setup::TestSphereSetup)(state, aux, coords, t)
+@uaware function (setup::TestSphereSetup)(state, aux, coords, t)
   # callable to set initial conditions
   FT = eltype(state)
 
@@ -278,4 +278,3 @@ end
     @test run_cubed_sphere_interpolation_test()
 end
 #------------------------------------------------
-

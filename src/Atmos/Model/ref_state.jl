@@ -95,9 +95,12 @@ $(DocStringExtensions.FIELDS)
   T::U(F,:temperature)
 end
 
+function IsothermalProfile(T::U(F,:temperature)) where {F<:Real}
+  IsothermalProfile{F}(T)
+end
+
 @uaware function (profile::IsothermalProfile)(orientation::Orientation, aux::Vars)
   FT = eltype(aux)
-  @show gravitational_potential(orientation, aux), FT(R_d), profile.T
   p = FT(MSLP) * exp(-gravitational_potential(orientation, aux)/(FT(R_d)*profile.T))
   return (profile.T, p)
 end

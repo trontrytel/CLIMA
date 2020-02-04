@@ -161,7 +161,7 @@ Base.@kwdef struct HeldSuarezSetup{FT}
   domain_height::FT = 30e3
 end
 
-function (setup::HeldSuarezSetup)(state, aux, coords, t)
+@uaware function (setup::HeldSuarezSetup)(state, aux, coords, t)
   # callable to set initial conditions
   FT = eltype(state)
 
@@ -177,7 +177,7 @@ function (setup::HeldSuarezSetup)(state, aux, coords, t)
   nothing
 end
 
-function held_suarez_forcing!(source, state, aux, t::Real)
+@uaware function held_suarez_forcing!(source, state, aux, t::Real)
   FT = eltype(state)
 
   ρ = state.ρ

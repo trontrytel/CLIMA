@@ -16,7 +16,7 @@ const p_ground = Float64(MSLP)
 const T_initial = Float64(255)
 const domain_height = Float64(30e3)
 
-function init_heldsuarez!(state, aux, coords, t)
+@uaware function init_heldsuarez!(state, aux, coords, t)
     FT = eltype(state)
 
     r = norm(coords, 2)
@@ -45,7 +45,7 @@ function config_heldsuarez(FT, N, resolution)
     return config
 end
 
-function held_suarez_forcing!(source, state, aux, t::Real)
+@uaware function held_suarez_forcing!(source, state, aux, t::Real)
     FT = eltype(state)
 
     ρ     = state.ρ

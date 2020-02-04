@@ -12,43 +12,43 @@ float_types = [Float32, Float64]
   # ideal gas law
   @test air_pressure(FT(1), FT(1), PhasePartition(FT(1))) === FT(R_v)
   @test air_pressure(FT(1), FT(2), PhasePartition(FT(1), FT(0.5), FT(0))) === FT(R_v)
-  @test air_pressure(FT(1), FT(1)) === FT(R_d)
-  @test air_pressure(FT(1), FT(2)) === 2*FT(R_d)
-  @test air_density(FT(1), FT(1)) === 1/FT(R_d)
-  @test air_density(FT(1), FT(2)) === 2/FT(R_d)
+  @test air_pressure(FT(1), FT(1)) === ustrip(FT(R_d))
+  @test air_pressure(FT(1), FT(2)) === ustrip(2*FT(R_d))
+  @test air_density(FT(1), FT(1)) === ustrip(1/FT(R_d))
+  @test air_density(FT(1), FT(2)) === ustrip(2/FT(R_d))
 
   # gas constants and heat capacities
-  @test gas_constant_air(PhasePartition(FT(0))) === FT(R_d)
-  @test gas_constant_air(PhasePartition(FT(1))) === FT(R_v)
-  @test gas_constant_air(PhasePartition(FT(0.5), FT(0.5))) ≈ FT(R_d)/2
-  @test gas_constant_air(FT) == FT(R_d)
+  @test gas_constant_air(PhasePartition(FT(0))) === ustrip(FT(R_d))
+  @test gas_constant_air(PhasePartition(FT(1))) === ustrip(FT(R_v))
+  @test gas_constant_air(PhasePartition(FT(0.5), FT(0.5))) ≈ ustrip(FT(R_d)/2)
+  @test gas_constant_air(FT) == ustrip(FT(R_d))
 
-  @test cp_m(PhasePartition(FT(0))) === FT(cp_d)
-  @test cp_m(PhasePartition(FT(1))) === FT(cp_v)
-  @test cp_m(PhasePartition(FT(1), FT(1))) === FT(cp_l)
-  @test cp_m(PhasePartition(FT(1), FT(0), FT(1))) === FT(cp_i)
-  @test cp_m(FT) == FT(cp_d)
+  @test cp_m(PhasePartition(FT(0))) === ustrip(FT(cp_d))
+  @test cp_m(PhasePartition(FT(1))) === ustrip(FT(cp_v))
+  @test cp_m(PhasePartition(FT(1), FT(1))) === ustrip(FT(cp_l))
+  @test cp_m(PhasePartition(FT(1), FT(0), FT(1))) === ustrip(FT(cp_i))
+  @test cp_m(FT) == ustrip(FT(cp_d))
 
-  @test cv_m(PhasePartition(FT(0))) === FT(cp_d - R_d)
-  @test cv_m(PhasePartition(FT(1))) === FT(cp_v - R_v)
-  @test cv_m(PhasePartition(FT(1), FT(1))) === FT(cv_l)
-  @test cv_m(PhasePartition(FT(1), FT(0), FT(1))) === FT(cv_i)
-  @test cv_m(FT) == FT(cv_d)
+  @test cv_m(PhasePartition(FT(0))) === ustrip(FT(cp_d - R_d))
+  @test cv_m(PhasePartition(FT(1))) === ustrip(FT(cp_v - R_v))
+  @test cv_m(PhasePartition(FT(1), FT(1))) === ustrip(FT(cv_l))
+  @test cv_m(PhasePartition(FT(1), FT(0), FT(1))) === ustrip(FT(cv_i))
+  @test cv_m(FT) == ustrip(FT(cv_d))
 
   # speed of sound
-  @test soundspeed_air(T_0 + 20, PhasePartition(FT(0))) == sqrt(cp_d/cv_d * R_d * (T_0 + 20))
-  @test soundspeed_air(T_0 + 100, PhasePartition(FT(1))) == sqrt(cp_v/cv_v * R_v * (T_0 + 100))
+  @test soundspeed_air(T_0 + 20, PhasePartition(FT(0))) == ustrip(sqrt(cp_d/cv_d * R_d * (T_0 + 20)))
+  @test soundspeed_air(T_0 + 100, PhasePartition(FT(1))) == ustrip(sqrt(cp_v/cv_v * R_v * (T_0 + 100)))
 
   # specific latent heats
-  @test latent_heat_vapor(FT(T_0))  ≈ LH_v0
-  @test latent_heat_fusion(FT(T_0)) ≈ LH_f0
-  @test latent_heat_sublim(FT(T_0)) ≈ LH_s0
+  @test latent_heat_vapor(FT(T_0))  ≈ ustrip(LH_v0)
+  @test latent_heat_fusion(FT(T_0)) ≈ ustrip(LH_f0)
+  @test latent_heat_sublim(FT(T_0)) ≈ ustrip(LH_s0)
 
   # saturation vapor pressure and specific humidity
   p=FT(1.e5); q_tot=FT(0.23); ρ=FT(1.);
   ρ_v_triple = press_triple / R_v / T_triple;
-  @test saturation_vapor_pressure(FT(T_triple), Liquid()) ≈ press_triple
-  @test saturation_vapor_pressure(FT(T_triple), Ice()) ≈ press_triple
+  @test saturation_vapor_pressure(FT(T_triple), Liquid()) ≈ ustrip(press_triple)
+  @test saturation_vapor_pressure(FT(T_triple), Ice()) ≈ ustrip(press_triple)
 
   @test q_vap_saturation(FT(T_triple), ρ, PhasePartition(FT(0))) == ρ_v_triple / ρ
   @test q_vap_saturation(FT(T_triple), ρ, PhasePartition(q_tot,q_tot)) == ρ_v_triple / ρ
@@ -110,9 +110,9 @@ float_types = [Float32, Float64]
 
   # potential temperatures
   T = FT(300)
-  @test liquid_ice_pottemp_given_pressure(T, FT(MSLP)) === T
-  @test liquid_ice_pottemp_given_pressure(T, FT(MSLP)/10) ≈ T * 10^(R_d/cp_d)
-  @test liquid_ice_pottemp_given_pressure(T, FT(MSLP)/10, PhasePartition(FT(1))) ≈ T * 10^(R_v/cp_v)
+  @test liquid_ice_pottemp_given_pressure(T, ustrip(FT(MSLP))) === T
+  @test liquid_ice_pottemp_given_pressure(T, ustrip(FT(MSLP)/10)) ≈ T * ustrip(10^(R_d/cp_d))
+  @test liquid_ice_pottemp_given_pressure(T, ustrip(FT(MSLP)/10), PhasePartition(FT(1))) ≈ T * ustrip(10^(R_v/cp_v))
 
   # dry potential temperatures. FIXME: add correctness tests
   T = FT(300); p=FT(1.e5); q_tot=FT(0.23)

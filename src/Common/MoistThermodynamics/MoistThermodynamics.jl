@@ -55,7 +55,7 @@ include("states.jl")
 The specific gas constant of moist air given
  - `q` [`PhasePartition`](@ref). Without this argument, the results are for dry air.
 """
-gas_constant_air(q::PhasePartition{FT}) where {FT<:Real} =
+@uaware gas_constant_air(q::PhasePartition{FT}) where {FT<:Real} =
   FT(R_d) * ( 1 +  (FT(molmass_ratio) - 1)*q.tot - FT(molmass_ratio)*(q.liq + q.ice) )
 gas_constant_air(::Type{FT}) where {FT<:Real} = gas_constant_air(q_pt_0(FT))
 
@@ -67,7 +67,7 @@ a thermodynamic state `ts`.
 """
 gas_constant_air(ts::ThermodynamicState) =
   gas_constant_air(PhasePartition(ts))
-gas_constant_air(ts::PhaseDry{FT}) where {FT<:Real} = FT(R_d)
+@uaware gas_constant_air(ts::PhaseDry{FT}) where {FT<:Real} = FT(R_d)
 
 """
     vapor_specific_humidity(q::PhasePartition{FT})
@@ -145,7 +145,7 @@ The isobaric specific heat capacity of moist
 air where, optionally,
  - `q` [`PhasePartition`](@ref). Without this argument, the results are for dry air.
 """
-cp_m(q::PhasePartition{FT}) where {FT<:Real} =
+@uaware cp_m(q::PhasePartition{FT}) where {FT<:Real} =
   FT(cp_d) + (FT(cp_v) - FT(cp_d))*q.tot + (FT(cp_l) - FT(cp_v))*q.liq + (FT(cp_i) - FT(cp_v))*q.ice
 cp_m(::Type{FT}) where {FT<:Real} = cp_m(q_pt_0(FT))
 
@@ -156,7 +156,7 @@ The isobaric specific heat capacity of moist
 air, given a thermodynamic state `ts`.
 """
 cp_m(ts::ThermodynamicState) = cp_m(PhasePartition(ts))
-cp_m(ts::PhaseDry{FT}) where {FT<:Real} = FT(cp_d)
+cp_m(ts::PhaseDry{FT}) where {FT<:Real} = FT(cp_d) #FIXME: Careful with this one - @uaware will not work
 
 """
     cv_m([q::PhasePartition])
@@ -165,7 +165,7 @@ The isochoric specific heat capacity of moist
 air where optionally,
  - `q` [`PhasePartition`](@ref). Without this argument, the results are for dry air.
 """
-cv_m(q::PhasePartition{FT}) where {FT<:Real} =
+cv_m(q::PhasePartition{FT}) where {FT<:Real} = #FIXME: Careful with this one - @uaware will not work
   FT(cv_d) + (FT(cv_v) - FT(cv_d))*q.tot + (FT(cv_l) - FT(cv_v))*q.liq + (FT(cv_i) - FT(cv_v))*q.ice
 cv_m(::Type{FT}) where {FT<:Real} = cv_m(q_pt_0(FT))
 
@@ -176,7 +176,7 @@ The isochoric specific heat capacity of moist
 air given a thermodynamic state `ts`.
 """
 cv_m(ts::ThermodynamicState) = cv_m(PhasePartition(ts))
-cv_m(ts::PhaseDry{FT}) where {FT<:Real} = FT(cv_d)
+cv_m(ts::PhaseDry{FT}) where {FT<:Real} = FT(cv_d) #FIXME: Careful with this one - @uaware will not work
 
 
 """
@@ -246,7 +246,7 @@ The internal energy per unit mass, given a thermodynamic state `ts` or
 and, optionally,
  - `q` [`PhasePartition`](@ref). Without this argument, the results are for dry air.
 """
-internal_energy(T::U(FT,:temperature), q::PhasePartition{FT}=q_pt_0(FT)) where {FT<:Real} =
+@uaware internal_energy(T::U(FT,:temperature), q::PhasePartition{FT}=q_pt_0(FT)) where {FT<:Real} =
   cv_m(q) * (T - FT(T_0)) +
   (q.tot - q.liq) * FT(e_int_v0) - q.ice * (FT(e_int_v0) + FT(e_int_i0))
 
@@ -352,7 +352,7 @@ soundspeed_air(ts::ThermodynamicState) =
 The specific latent heat of vaporization where
  - `T` temperature
 """
-latent_heat_vapor(T::U(FT,:temperature)) where {FT<:Real} =
+@uaware latent_heat_vapor(T::U(FT,:temperature)) where {FT<:Real} =
   latent_heat_generic(T, FT(LH_v0), FT(cp_v) - FT(cp_l))
 
 """
@@ -370,7 +370,7 @@ latent_heat_vapor(ts::ThermodynamicState) =
 The specific latent heat of sublimation where
  - `T` temperature
 """
-latent_heat_sublim(T::U(FT,:temperature)) where {FT<:Real} =
+@uaware latent_heat_sublim(T::U(FT,:temperature)) where {FT<:Real} =
   latent_heat_generic(T, FT(LH_s0), FT(cp_v) - FT(cp_i))
 
 """
@@ -388,7 +388,7 @@ latent_heat_sublim(ts::ThermodynamicState) =
 The specific latent heat of fusion where
  - `T` temperature
 """
-latent_heat_fusion(T::U(FT,:temperature)) where {FT<:Real} =
+@uaware latent_heat_fusion(T::U(FT,:temperature)) where {FT<:Real} =
   latent_heat_generic(T, FT(LH_f0), FT(cp_l) - FT(cp_i))
 
 """
@@ -413,7 +413,8 @@ isobaric specific heat capacities of the two phases, given
          (heat capacity in the higher-temperature phase minus that
          in the lower-temperature phase).
 """
-latent_heat_generic(T::U(FT,:temperature), LH_0::U(FT,:latent), Δcp::U(FT,:shc)) where {FT<:Real} =
+@uaware latent_heat_generic(T::U(FT,:temperature), LH_0::U(FT,:latent),
+                            Δcp::U(FT,:shc)) where {FT<:Real} =
   LH_0 + Δcp * (T - FT(T_0))
 
 
@@ -478,7 +479,7 @@ the triple point pressure `press_triple`.
 """
 saturation_vapor_pressure(T::U(FT,:temperature), ::Liquid) where {FT<:Real} =
   saturation_vapor_pressure(T, FT(LH_v0), FT(cp_v) - FT(cp_l))
-function saturation_vapor_pressure(ts::ThermodynamicState{FT}, ::Liquid) where {FT<:Real}
+@uaware function saturation_vapor_pressure(ts::ThermodynamicState{FT}, ::Liquid) where {FT<:Real}
 
     return saturation_vapor_pressure(air_temperature(ts), FT(LH_v0), FT(cp_v) - FT(cp_l))
 
@@ -488,7 +489,7 @@ saturation_vapor_pressure(T::U(FT,:temperature), ::Ice) where {FT<:Real} =
 saturation_vapor_pressure(ts::ThermodynamicState{FT}, ::Ice) where {FT<:Real} =
   saturation_vapor_pressure(air_temperature(ts), FT(LH_s0), FT(cp_v) - FT(cp_i))
 
-function saturation_vapor_pressure(T::U(FT,:temperature), LH_0::U(FT,:latent), Δcp::U(FT,:shc)) where {FT<:Real}
+@uaware function saturation_vapor_pressure(T::U(FT,:temperature), LH_0::U(FT,:latent), Δcp::U(FT,:shc)) where {FT<:Real}
 
     return FT(press_triple) * (T/FT(T_triple))^(Δcp/FT(R_v)) *
         exp( (FT(LH_0) - Δcp*FT(T_0))/FT(R_v) * (1 / FT(T_triple) - 1 / T) )
@@ -534,7 +535,7 @@ the saturation specific humidity is that over a mixture of liquid and ice, with 
 fraction of liquid given by temperature dependent `liquid_fraction(T)` and the
 fraction of ice by the complement `1 - liquid_fraction(T)`.
 """
-function q_vap_saturation(T::U(FT,:temperature), ρ::U(FT,:density), q::PhasePartition{FT}=q_pt_0(FT)) where {FT<:Real}
+@uaware function q_vap_saturation(T::U(FT,:temperature), ρ::U(FT,:density), q::PhasePartition{FT}=q_pt_0(FT)) where {FT<:Real}
 
     # get phase partitioning
     _liquid_frac = liquid_fraction(T, q)
@@ -611,7 +612,7 @@ them.
 Otherwise, phase equilibrium is assumed so that the fraction of liquid
 is a function that is 1 above `T_freeze` and goes to zero below `T_freeze`.
 """
-function liquid_fraction(T::U(FT,:temperature), q::PhasePartition{FT}=q_pt_0(FT)) where {FT<:Real}
+@uaware function liquid_fraction(T::U(FT,:temperature), q::PhasePartition{FT}=q_pt_0(FT)) where {FT<:Real}
   q_c = q.liq + q.ice     # condensate specific humidity
   if q_c > 0
     return q.liq / q_c
@@ -658,7 +659,7 @@ PhasePartition(ts::PhaseEquil) =
   PhasePartition_equil(air_temperature(ts), air_density(ts), total_specific_humidity(ts))
 PhasePartition(ts::PhaseNonEquil) = ts.q
 
-function ∂e_int_∂T(T::U(FT,:temperature), e_int::U(FT,:energypv), ρ::U(FT,:density), q_tot::FT) where {FT<:Real}
+@uaware function ∂e_int_∂T(T::U(FT,:temperature), e_int::U(FT,:energypv), ρ::U(FT,:density), q_tot::FT) where {FT<:Real}
   cvm = cv_m(PhasePartition_equil(T, ρ, q_tot))
   q_vap_sat = q_vap_saturation(T, ρ)
   λ = liquid_fraction(T)
@@ -712,14 +713,14 @@ end
 
 Minimum interval for saturation adjustment using Secant method
 """
-@inline ΔT_min(::Type{FT}) where FT = FT(3) * unit_alias(:temperature)
+@inline ΔT_min(::Type{FT}) where FT = FT(3) * unit_alias(:temperature) #FIXME: Careful using this one 
 
 """
     ΔT_max(::Type{FT})
 
 Maximum interval for saturation adjustment using Secant method
 """
-@inline ΔT_max(::Type{FT}) where FT = FT(10) * unit_alias(:temperature)
+@inline ΔT_max(::Type{FT}) where FT = FT(10) * unit_alias(:temperature) #FIXME: Careful using this one
 
 """
     bound_upper_temperature(T_1::FT, T_2::FT) where {FT<:Real}
@@ -749,7 +750,7 @@ by finding the root of
 
 See also [`saturation_adjustment_q_tot_θ_liq_ice`](@ref).
 """
-function saturation_adjustment(e_int::U(FT,:gravpot), ρ::U(FT,:density), q_tot::FT, tol::FT, maxiter::Int) where {FT<:AbstractFloat}
+@uaware function saturation_adjustment(e_int::U(FT,:gravpot), ρ::U(FT,:density), q_tot::FT, tol::FT, maxiter::Int) where {FT<:AbstractFloat}
   T_1 = max(FT(T_min), air_temperature(e_int, PhasePartition(q_tot))) # Assume all vapor
   q_v_sat = q_vap_saturation(T_1, ρ)
   unsaturated = q_tot <= q_v_sat
@@ -788,7 +789,7 @@ by finding the root of
 
 See also [`saturation_adjustment`](@ref).
 """
-function saturation_adjustment_q_tot_θ_liq_ice(θ_liq_ice::U(FT,:temperature), ρ::U(FT,:density), q_tot::FT, tol::FT, maxiter::Int) where {FT<:AbstractFloat}
+@uaware function saturation_adjustment_q_tot_θ_liq_ice(θ_liq_ice::U(FT,:temperature), ρ::U(FT,:density), q_tot::FT, tol::FT, maxiter::Int) where {FT<:AbstractFloat}
   T_1 = air_temperature_from_liquid_ice_pottemp(θ_liq_ice, ρ, PhasePartition(q_tot)) # Assume all vapor
   q_v_sat = q_vap_saturation(T_1, ρ)
   unsaturated = q_tot <= q_v_sat
@@ -826,7 +827,7 @@ by finding the root of
 
 See also [`saturation_adjustment`](@ref).
 """
-function saturation_adjustment_q_tot_θ_liq_ice_given_pressure(θ_liq_ice::U(FT,:temperature), p::U(FT,:pressure), q_tot::FT, tol::FT, maxiter::Int) where {FT<:AbstractFloat}
+@uaware function saturation_adjustment_q_tot_θ_liq_ice_given_pressure(θ_liq_ice::U(FT,:temperature), p::U(FT,:pressure), q_tot::FT, tol::FT, maxiter::Int) where {FT<:AbstractFloat}
   T_1 = air_temperature_from_liquid_ice_pottemp_given_pressure(θ_liq_ice, p, PhasePartition(q_tot)) # Assume all vapor
   ρ = air_density(T_1, p, PhasePartition(q_tot))
   q_v_sat = q_vap_saturation(T_1, ρ)
@@ -852,7 +853,7 @@ end
 Effective latent heat of condensate (weighted sum of liquid and ice),
 with specific latent heat evaluated at reference temperature `T_0`.
 """
-latent_heat_liq_ice(q::PhasePartition{FT}=q_pt_0(FT)) where {FT<:Real} =
+@uaware latent_heat_liq_ice(q::PhasePartition{FT}=q_pt_0(FT)) where {FT<:Real} =
   FT(LH_v0)*q.liq + FT(LH_s0)*q.ice
 
 """
@@ -966,7 +967,7 @@ by finding the root of
   T - air_temperature_from_liquid_ice_pottemp_given_pressure(θ_liq_ice, air_pressure(T, ρ, q), q) = 0
 ``
 """
-function air_temperature_from_liquid_ice_pottemp_non_linear(θ_liq_ice::U(FT,:temperature), ρ::U(FT,:density), tol::FT, maxiter::Int,
+@uaware function air_temperature_from_liquid_ice_pottemp_non_linear(θ_liq_ice::U(FT,:temperature), ρ::U(FT,:density), tol::FT, maxiter::Int,
   q::PhasePartition{FT}=q_pt_0(FT)) where {FT<:AbstractFloat}
   sol = find_zero(
     T -> T - air_temperature_from_liquid_ice_pottemp_given_pressure(θ_liq_ice, air_pressure(T, ρ, q), q),
@@ -1004,7 +1005,9 @@ The virtual temperature where
 and, optionally,
  - `q` [`PhasePartition`](@ref). Without this argument, the results are for dry air.
 """
-virtual_pottemp(T::U(FT,:temperature), ρ::U(FT,:density), q::PhasePartition{FT}=q_pt_0(FT)) where {FT<:Real} =
+@uaware virtual_pottemp(T::U(FT,:temperature), ρ::U(FT,:density),
+                        q::PhasePartition{FT}=q_pt_0(FT)
+                        ) where {FT<:Real} =
   gas_constant_air(q) / FT(R_d) * dry_pottemp(T, ρ, q)
 
 """
@@ -1059,7 +1062,7 @@ The Exner function where
 and, optionally,
  - `q` [`PhasePartition`](@ref). Without this argument, the results are for dry air.
 """
-function exner_given_pressure(p::U(FT,:pressure), q::PhasePartition{FT}=q_pt_0(FT)) where {FT<:Real}
+@uaware function exner_given_pressure(p::U(FT,:pressure), q::PhasePartition{FT}=q_pt_0(FT)) where {FT<:Real}
     # gas constant and isobaric specific heat of moist air
     _R_m    = gas_constant_air(q)
     _cp_m   = cp_m(q)
@@ -1096,7 +1099,7 @@ The relative humidity, given
 and, optionally,
  - `q` [`PhasePartition`](@ref). Without this argument, the results are for dry air.
  """
-function relative_humidity(T::FT, p::FT, e_int::FT, q::PhasePartition{FT}=q_pt_0(FT)) where {FT<:Real}
+@uaware function relative_humidity(T::FT, p::FT, e_int::FT, q::PhasePartition{FT}=q_pt_0(FT)) where {FT<:Real}
   q_vap = q.tot - q.liq - q.ice
   p_vap = q_vap * air_density(T,p,q) * FT(R_v) * air_temperature(e_int, q)
   liq_frac = liquid_fraction(T,q)

@@ -13,7 +13,7 @@ and, optionally,
  - `ρq_liq` liquid water density
  - `ρq_ice` ice density
 """
-function linearized_air_pressure(ρ::U(FT,:density), ρe_tot::U(FT,:energypv), ρe_pot::U(FT,:energypv),
+@uaware function linearized_air_pressure(ρ::U(FT,:density), ρe_tot::U(FT,:energypv), ρe_pot::U(FT,:energypv),
                                  ρq_tot::U(FT,:density)=FT(0)*u"kg/m^3", ρq_liq::U(FT,:density)=FT(0)*u"kg/m^3",
                                  ρq_ice::U(FT,:density)=FT(0)*u"kg/m^3") where {FT<:Real}
   ρ*FT(R_d)*FT(T_0) + FT(R_d)/FT(cv_d)*(ρe_tot - ρe_pot - (ρq_tot - ρq_liq)*FT(e_int_v0) + ρq_ice*(FT(e_int_i0) + FT(e_int_v0)))

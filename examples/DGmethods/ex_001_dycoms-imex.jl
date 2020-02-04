@@ -78,7 +78,7 @@ URL = {https://doi.org/10.1175/MWR2930.1},
 eprint = {https://doi.org/10.1175/MWR2930.1}
 }
 """
-function Initialise_DYCOMS!(state::Vars, aux::Vars, (x,y,z), t)
+@uaware function Initialise_DYCOMS!(state::Vars, aux::Vars, (x,y,z), t)
   FT            = eltype(state)
   xvert::FT     = z
   Rd::FT        = R_d
@@ -336,7 +336,7 @@ function run(mpicomm,
         =#
         solver = SolverMethod(dg, Q;
                               dt = dt, t0 = 0)
-        
+
         # Get statistics during run
         out_interval_diags = 10000
         diagnostics_time_str = string(now())
@@ -458,4 +458,3 @@ function main()
 end
 
 main()
-

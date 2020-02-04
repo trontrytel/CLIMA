@@ -98,7 +98,7 @@ $(DocStringExtensions.FIELDS)
 end
 
 function ConstantViscosityWithDivergence(ρν::U(FT,:dynvisc)) where {FT}
-  @show ConstantViscosityWithDivergence{FT}(ρν)
+  ConstantViscosityWithDivergence{FT}(ρν)
 end
 
 vars_gradient(::ConstantViscosityWithDivergence,FT) = @vars()
