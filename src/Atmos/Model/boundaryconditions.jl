@@ -8,6 +8,14 @@ function atmos_boundary_flux_diffusive!(nf::CentralNumericalFluxDiffusive, bc,
                                         F⁻,Y⁻,Σ⁻,α⁻,
                                         bctype, t, 
                                         Y₁⁻, Σ₁⁻, α₁⁻)
+  # Y  ≡ state vars
+  # α  ≡ auxiliary vars
+  # Σ  ≡ diffusive vars
+  # F  ≡ flux
+  # X₁ ≡ X at the first interior node
+  # bctype ≡ `wall` identifier
+  # t ≡ simulation time
+  
   FT = eltype(F⁺)
   atmos_boundary_state!(nf, bc, atmos, Y⁺, Σ⁺, α⁺, n⁻,
                         Y⁻, Σ⁻, α⁻, bctype, t,
@@ -329,7 +337,6 @@ function atmos_boundary_state!(::Rusanov, bc::SurfaceDrivenBubbleBC,
   end
   nothing
 end
-
 function atmos_boundary_state!(::CentralNumericalFluxDiffusive, bc::SurfaceDrivenBubbleBC,
                                m::AtmosModel, 
                                Y⁺::Vars, 
@@ -342,23 +349,18 @@ function atmos_boundary_state!(::CentralNumericalFluxDiffusive, bc::SurfaceDrive
                                bctype, t, _...)
   FT = eltype(Y⁻)
   k̂  = α⁻.orientation.∇Φ / norm(α⁻.orientation.∇Φ)  
-  
   r = sqrt((α⁻.coord[1]-bc.x₀)^2 + (α⁻.coord[2]-bc.x₀)^2) 
-
   F₀ =  bc.F₀*(1 - sign(t-bc.t₁))/2 
-
   @inbounds begin
-    # Momentum b.c. prescribed (no flow across wall boundary)
-    Y_bc  = dot(Y⁻.ρu, n⁻)*SVector(n⁻)
-    Y⁺.ρu = -Y⁻.ρu + 2*Y_bc
-    # Energy flux b.c. prescribed (diffusive flux through bottom wall)
+    # Energy flux prescribed (diffusive flux through bottom wall)
+    # MSEF ≡ Moist Static Energy Flux
     if bctype == 1
       if r > bc.a 
         MSEF      = F₀ * exp(-(r-bc.a)^2 / bc.σ^2)
-        Σ⁺.∇h_tot = MSEF * k̂
+        Σ⁺.∇h_tot = -Σ⁻.∇h_tot + 2 * MSEF * k̂
       else
         MSEF      = F₀
-        Σ⁺.∇h_tot = MSEF * k̂
+        Σ⁺.∇h_tot = -Σ⁻.∇h_tot + 2 * MSEF * k̂
       end
     end
   end
