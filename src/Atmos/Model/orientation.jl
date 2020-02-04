@@ -13,8 +13,8 @@ end
 
 function vars_aux(m::Orientation, T)
   @vars begin
-    Φ::U(T,:gravpot) # gravitational potential
-    ∇Φ::SVector{3, U(T,:accel)}
+    Φ::units(T,:gravpot) # gravitational potential
+    ∇Φ::SVector{3, units(T,:accel)}
   end
 end
 

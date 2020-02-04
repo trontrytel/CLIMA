@@ -40,11 +40,11 @@ struct HydrostaticState{P,F} <: ReferenceState
 end
 
 vars_aux(m::HydrostaticState, FT) = @vars begin
-  ρ::U(FT,:density)
-  p::U(FT,:pressure)
-  T::U(FT,:temperature)
-  ρe::U(FT,:energypv)
-  ρq_tot::U(FT,:density)
+  ρ::units(FT,:density)
+  p::units(FT,:pressure)
+  T::units(FT,:temperature)
+  ρe::units(FT,:energypv)
+  ρq_tot::units(FT,:density)
 end
 
 

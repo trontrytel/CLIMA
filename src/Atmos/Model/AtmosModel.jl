@@ -56,9 +56,9 @@ end
 
 function vars_state(m::AtmosModel, FT)
   @vars begin
-    ρ::U(FT,:density)
-    ρu::SVector{3, U(FT,:massflux)}
-    ρe::U(FT,:energypv)
+    ρ::units(FT,:density)
+    ρu::SVector{3, units(FT,:massflux)}
+    ρe::units(FT,:energypv)
     turbulence::vars_state(m.turbulence, FT)
     moisture::vars_state(m.moisture, FT)
     radiation::vars_state(m.radiation, FT)
@@ -66,15 +66,15 @@ function vars_state(m::AtmosModel, FT)
 end
 function vars_gradient(m::AtmosModel, FT)
   @vars begin
-    u::SVector{3, U(FT,:velocity)}
-    h_tot::U(FT,:gravpot)
+    u::SVector{3, units(FT,:velocity)}
+    h_tot::units(FT,:gravpot)
     turbulence::vars_gradient(m.turbulence,FT)
     moisture::vars_gradient(m.moisture,FT)
   end
 end
 function vars_diffusive(m::AtmosModel, FT)
   @vars begin
-    ∇h_tot::SVector{3, U(FT,:accel)}
+    ∇h_tot::SVector{3, units(FT,:accel)}
     turbulence::vars_diffusive(m.turbulence,FT)
     moisture::vars_diffusive(m.moisture,FT)
   end
@@ -85,7 +85,7 @@ function vars_aux(m::AtmosModel, FT)
   @vars begin
     ∫dz::vars_integrals(m, FT)
     ∫dnz::vars_integrals(m, FT)
-    coord::SVector{3, U(FT,:space)}
+    coord::SVector{3, units(FT,:space)}
     orientation::vars_aux(m.orientation, FT)
     ref_state::vars_aux(m.ref_state,FT)
     turbulence::vars_aux(m.turbulence,FT)
