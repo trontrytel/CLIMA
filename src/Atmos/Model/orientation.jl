@@ -1,6 +1,5 @@
 # TODO: add Coriolis vectors
 import ..PlanetParameters: grav, planet_radius
-import ..UnitAnnotations: space_unit, gravpot_unit, accel_unit
 using ..UnitAnnotations
 export Orientation, NoOrientation, FlatOrientation, SphericalOrientation
 
@@ -36,9 +35,9 @@ function vars_aux(m::NoOrientation, T)
   @vars()
 end
 atmos_init_aux!(::NoOrientation, ::AtmosModel, aux::Vars, geom::LocalGeometry) = nothing
-gravitational_potential(::NoOrientation, aux::Vars) = -zero(eltype(aux)) * unit_alias(:gravpot)
-∇gravitational_potential(::NoOrientation, aux::Vars) = SVector{3,eltype(aux)}(0,0,0) * unit_alias(:accel)
-altitude(orientation::NoOrientation, aux::Vars) = -zero(eltype(aux)) * unit_alias(:space)
+gravitational_potential(::NoOrientation, aux::Vars) = -zero(eltype(aux)) * unit_alias(:gravpot) #FIXME
+∇gravitational_potential(::NoOrientation, aux::Vars) = SVector{3,eltype(aux)}(0,0,0) * unit_alias(:accel) #FIXME
+altitude(orientation::NoOrientation, aux::Vars) = -zero(eltype(aux)) * unit_alias(:space) #FIXME
 
 """
     SphericalOrientation <: Orientation
@@ -48,10 +47,11 @@ to the surface of the planet.
 """
 struct SphericalOrientation <: Orientation
 end
-@uaware function atmos_init_aux!(::SphericalOrientation, ::AtmosModel, aux::Vars, geom::LocalGeometry)
+function atmos_init_aux!(::SphericalOrientation, m::AtmosModel, aux::Vars, geom::LocalGeometry)
+  FT = eltype(aux)
   normcoord = norm(aux.coord)
-  aux.orientation.Φ = grav * (normcoord - planet_radius)
-  aux.orientation.∇Φ = grav / normcoord .* aux.coord
+  aux.orientation.Φ = FT(grav,m) * (normcoord - FT(planet_radius,m))
+  aux.orientation.∇Φ = FT(grav,m) / normcoord .* aux.coord
 end
 
 """
@@ -64,9 +64,9 @@ struct FlatOrientation <: Orientation
   # for Coriolis we could add latitude?
 end
 function atmos_init_aux!(::FlatOrientation, m::AtmosModel, aux::Vars, geom::LocalGeometry)
+  FT = eltype(aux)
   aux.orientation.Φ = grav * aux.coord[3]
-  u_grad_pot = gravpot_unit(m) / space_unit(m)
-  v = (0, 0, grav / accel_unit(m)).*u_grad_pot
-  # FIXME: This direct call to a constructor
-  aux.orientation.∇Φ = SVector{3, units(eltype(aux), u_grad_pot)}(v)
+  u_grad_pot = get_unit(m,:accel)
+  v = (0*u_grad_pot, 0*u_grad_pot, FT(grav,m))
+  aux.orientation.∇Φ = SVector{3, units(FT, u_grad_pot)}(v)
 end

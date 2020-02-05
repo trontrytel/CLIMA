@@ -73,6 +73,10 @@ Base.eltype(v::Vars) = eltype(parent(v))
 Base.propertynames(::Vars{S}) where {S} = fieldnames(S)
 Base.similar(v::Vars{S,A,offset}) where {S,A,offset} = Vars{S,A,offset}(similar(parent(v)))
 
+# Figure out if this vars type supports units
+@generated UnitAnnotations.unit_annotations(v::Vars{S}, sym) where {S} =
+  (any(x->x <: AbstractQuantity, S.parameters) ? :(get_unit(sym)) : NoUnits)
+
 @generated function Base.getproperty(v::Vars{S,A,offset}, sym::Symbol) where {S,A,offset}
   expr = quote
     Base.@_inline_meta
@@ -160,6 +164,9 @@ Base.parent(g::Grad) = getfield(g,:array)
 Base.eltype(g::Grad) = eltype(parent(g))
 Base.propertynames(::Grad{S}) where {S} = fieldnames(S)
 Base.similar(g::Grad{S,A,offset}) where {S,A,offset} = Grad{S,A,offset}(similar(parent(g)))
+
+@generated UnitAnnotations.unit_annotations(v::Grad{S}, sym) where {S} =
+  (any(x->x <: AbstractQuantity, S.parameters) ? :(get_unit(sym)) : NoUnits)
 
 @generated function Base.getproperty(v::Grad{S,A,offset}, sym::Symbol) where {S,A,offset}
   M = size(A,1)

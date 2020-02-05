@@ -2,6 +2,8 @@ module ParametersType
 using Unitful
 import Unitful: AbstractQuantity, Units
 
+import ..UnitAnnotations: unit_annotations
+
 export @parameter, @exportparameter, ParametersType
 
 """
@@ -93,8 +95,6 @@ macro parameter(sym, val, desc, doexport=false)
   end
 end
 
-global symbols = []
-
 # TODO: figure out how to get this to call @parameter with doexport=true
 macro exportparameter(sym, val, desc)
   esym = esc(sym)
@@ -106,13 +106,11 @@ macro exportparameter(sym, val, desc)
   quote
     $exportcmd
     const $esym = Parameter{$qsym}()
-    if !@isdefined symbols
-        global symbols = []
-    end
-    push!(symbols, $esym)
     # FIXME: shouldn't really allow constructors to return other types
     Base.Float64(::Parameter{$qsym}) = $(Float64(ustrip(ev)) * upreferred(unit(ev)))
+    Base.Float64(p::Parameter{$qsym}, bl) = (v = Float64(p); unit_annotations(bl) ? v : ustrip(v))
     Base.Float32(::Parameter{$qsym}) = $(Float32(ustrip(ev)) * upreferred(unit(ev)))
+    Base.Float32(p::Parameter{$qsym}, bl) = (v = Float32(p); unit_annotations(bl) ? v : ustrip(v))
     Base.string(::Parameter{$qsym}) = $(string(ev))
     ParametersType.getval(::Parameter{$qsym}) = $(esc(upreferred(getval(ev))))
     """

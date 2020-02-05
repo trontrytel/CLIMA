@@ -59,7 +59,7 @@ function main()
   end
 end
 
-@uaware function run(mpicomm, polynomialorder, numelem_horz, numelem_vert,
+function run(mpicomm, polynomialorder, numelem_horz, numelem_vert,
              timeend, outputtime, ArrayType, FT)
 
   setup = AcousticWaveSetup{FT}()

@@ -1,8 +1,7 @@
 using MacroTools
 using MacroTools: postwalk, @capture, @expand, prettify
 
-using ..PlanetParameters
-using ..ParametersType: getval
+export @uaware
 
 """
   Duplicate structure definitions, maintaining a common constructor, to enable optional
@@ -95,36 +94,6 @@ macro uaware(ex)
     end
     #= @show prettify(q) =#
     return esc(q)
-
-  elseif @capture(shortdef(ex), (f_(params__) = body_) | (f_(params__) where {Ts__} = body_))
-    if !@isdefined(Ts) || Ts === nothing
-      Ts = Any[]
-    end
-    params_unitless, params_unitful = split_U(params)
-    planet_params = names(PlanetParameters) #FIXME
-
-    # Careful of the generation order here!
-    body_unitless = postwalk(body) do x
-      (@capture(x, s_Symbol) && s in planet_params) || (return x)
-      Base.eval(__module__, s) |> getval |> ustrip
-    end
-
-    @assert params_unitless !== params_unitful
-    def_unitless = :($f($(params_unitless...)) where {$(Ts...)} = $body_unitless)
-    def_unitful  = :($f($(params_unitful... )) where {$(Ts...)} = $body)
-
-    #= return quote =#
-    #=   Base.@__doc__ $def_unitful =#
-    #=                 $def_unitless =#
-    #= end |> esc =#
-    q = quote
-      Base.@__doc__ $def_unitful
-                    $def_unitless # unitless goes next - overriding where no input parameters changed
-    end
-    if f===:exner_given_pressure
-        @show prettify(q)
-    end
-    return esc(q)
   end
 
   error("Expected a structure or function definition for annotation.")
@@ -149,8 +118,4 @@ end
 # Quick test
 @uaware struct Foo{FT}
   x::U(FT,:massflux)
-end
-
-@uaware function foo(x::U(FT,:massflux)) where {FT<:AbstractFloat}
-  R_d
 end

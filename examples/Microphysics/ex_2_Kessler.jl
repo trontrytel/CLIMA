@@ -100,7 +100,7 @@ end
 end
 
 
-@uaware @inline function constant_auxiliary_init!(aux, x, z, _...)
+@inline function constant_auxiliary_init!(aux, x, z, _...)
   FT = eltype(aux)
   @inbounds begin
     aux[_c_z] = z  # for gravity
@@ -200,7 +200,7 @@ const w_max = .6    # m/s
 const Z_max = 1500. # m
 const X_max = 1500. # m
 
-@uaware function single_eddy!(Q, t, x, z, _...)
+function single_eddy!(Q, t, x, z, _...)
   FT = eltype(Q)
 
   # initial condition

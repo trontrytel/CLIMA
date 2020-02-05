@@ -13,7 +13,7 @@ using CLIMA.ODESolvers
 using CLIMA.GenericCallbacks
 using CLIMA.Atmos
 using CLIMA.UnitAnnotations
-import CLIMA.UnitAnnotations: space_unit, time_unit, mass_unit, temperature_unit
+import CLIMA.UnitAnnotations: unit_annotations
 using CLIMA.VariableTemplates
 using CLIMA.MoistThermodynamics
 using CLIMA.PlanetParameters
@@ -40,11 +40,8 @@ const polynomialorder   = 4
 const dt                = 0.01
 const timeend           = 10dt
 
-# Default units to use in differentiations
-space_unit(::AtmosModel) = u"m"
-time_unit(::AtmosModel) = u"s"
-mass_unit(::AtmosModel) = u"kg"
-temperature_unit(::AtmosModel) = u"K"
+unit_annotations(::AtmosModel) = true
+unit_annotations(::Atmos.AnisoMinDiss) = true
 
 # ------------- Initial condition function ----------- #
 """

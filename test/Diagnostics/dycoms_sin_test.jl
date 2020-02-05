@@ -27,7 +27,7 @@ if !@isdefined integration_testing
     parse(Bool, lowercase(get(ENV,"JULIA_CLIMA_INTEGRATION_TESTING","false")))
 end
 
-@uaware function Initialise_DYCOMS!(state::Vars, aux::Vars, (x,y,z), t)
+function Initialise_DYCOMS!(state::Vars, aux::Vars, (x,y,z), t)
   FT            = eltype(state)
   xvert::FT     = z
   Rd::FT        = R_d

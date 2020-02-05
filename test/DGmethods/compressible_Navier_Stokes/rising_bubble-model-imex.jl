@@ -16,7 +16,7 @@ using CLIMA.ODESolvers
 using CLIMA.GenericCallbacks
 using CLIMA.Atmos
 using CLIMA.UnitAnnotations
-import CLIMA.UnitAnnotations: space_unit, time_unit, mass_unit, temperature_unit
+import CLIMA.UnitAnnotations: unit_annotations
 using CLIMA.VariableTemplates
 using CLIMA.MoistThermodynamics
 using CLIMA.PlanetParameters
@@ -42,16 +42,9 @@ const dim       = 3
 const dt        = 0.1
 const timeend   = 10dt
 
-space_unit(::AtmosModel) = u"m"
-time_unit(::AtmosModel) = u"s"
-mass_unit(::AtmosModel) = u"kg"
-temperature_unit(::AtmosModel) = u"K"
-
-space_unit(::Atmos.AtmosLinearModel) = u"m"
-time_unit(::Atmos.AtmosLinearModel) = u"s"
-
-space_unit(::Atmos.Vreman) = u"m"
-time_unit(::Atmos.Vreman) = u"s"
+unit_annotations(::AtmosModel) = true
+unit_annotations(::Atmos.AtmosLinearModel) = true
+unit_annotations(::Atmos.Vreman) = true
 
 # ------------- Initial condition function ----------- #
 """

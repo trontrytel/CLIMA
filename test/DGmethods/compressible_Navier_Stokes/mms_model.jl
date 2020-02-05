@@ -9,14 +9,8 @@ import CLIMA.DGmethods: BalanceLaw, vars_aux, vars_state, vars_gradient,
                         diffusive!, init_aux!, init_state!,
                         init_ode_state, LocalGeometry
 
-import CLIMA.UnitAnnotations: space_unit, time_unit
-
-
 struct MMSModel{dim} <: BalanceLaw
 end
-
-space_unit(m::MMSModel) = u"m"
-time_unit(m::MMSModel) = u"s"
 
 vars_aux(::MMSModel,T) = @vars begin
   x1::units(T,:space)

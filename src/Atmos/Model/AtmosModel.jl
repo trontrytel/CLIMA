@@ -9,7 +9,6 @@ using ..VariableTemplates
 using ..MoistThermodynamics
 using ..PlanetParameters
 using ..UnitAnnotations
-import ..UnitAnnotations: space_unit, time_unit, mass_unit, temperature_unit
 import ..MoistThermodynamics: internal_energy
 using ..SubgridScaleParameters
 using GPUifyLoops, Unitful

@@ -8,9 +8,9 @@ abstract type AbstractSubsidence{FT<:AbstractFloat} end
 
 struct NoSubsidence{FT} <: AbstractSubsidence{FT} end
 
-@uaware struct ConstantSubsidence{FT} <: AbstractSubsidence{FT}
+struct ConstantSubsidence{FT} <: AbstractSubsidence{FT}
   D::U(FT,:frequency)
 end
 
-subsidence_velocity(::NoSubsidence{FT}, z::U(FT,:space)) where {FT} = FT(0) * unit_alias(:velocity)
+subsidence_velocity(::NoSubsidence{FT}, z::U(FT,:space)) where {FT} = FT(0) * unit_alias(:velocity) #FIXME
 subsidence_velocity(subsidence::ConstantSubsidence{FT}, z::U(FT,:space)) where {FT} = subsidence.D*z

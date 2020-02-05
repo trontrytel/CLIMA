@@ -4,7 +4,7 @@ using Logging
 using Test
 using Unitful
 using CLIMA.UnitAnnotations
-import CLIMA.UnitAnnotations: space_unit, time_unit
+import CLIMA.UnitAnnotations: unit_annotations
 using CLIMA.Mesh.Topologies
 using CLIMA.Mesh.Grids
 using CLIMA.DGmethods
@@ -36,9 +36,7 @@ const output = parse(Bool, lowercase(get(ENV,"JULIA_CLIMA_OUTPUT","false")))
 
 include("advection_diffusion_model.jl")
 
-# provide default units
-space_unit(::AdvectionDiffusion) = unit_alias(:space)
-time_unit(::AdvectionDiffusion)  = unit_alias(:time)
+unit_annotations(::AdvectionDiffusion) = true
 
 # Stored in the aux state are:
 #   `coord` coordinate points (needed for BCs)

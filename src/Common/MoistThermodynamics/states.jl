@@ -251,9 +251,9 @@ end
 
 Fixed lapse rate hydrostatic reference state
 """
-@uaware function fixed_lapse_rate_ref_state(z::FT,
-                                            T_surface::FT,
-                                            T_min::FT) where {FT<:AbstractFloat}
+function fixed_lapse_rate_ref_state(z::FT,
+                                    T_surface::FT,
+                                    T_min::FT) where {FT<:AbstractFloat}
   Γ = FT(grav)/FT(cp_d)
   z_tropopause = (T_surface - T_min) / Γ
   H_min = FT(R_d) * T_min / FT(grav)

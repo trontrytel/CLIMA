@@ -78,7 +78,7 @@ URL = {https://doi.org/10.1175/MWR2930.1},
 eprint = {https://doi.org/10.1175/MWR2930.1}
 }
 """
-@uaware function Initialise_DYCOMS!(state::Vars, aux::Vars, (x,y,z), t)
+function Initialise_DYCOMS!(state::Vars, aux::Vars, (x,y,z), t)
   FT            = eltype(state)
   xvert::FT     = z
   Rd::FT        = R_d

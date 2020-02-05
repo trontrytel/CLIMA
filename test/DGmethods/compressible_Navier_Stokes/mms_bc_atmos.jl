@@ -11,7 +11,7 @@ using CLIMA.ODESolvers
 using CLIMA.GenericCallbacks
 using CLIMA.Atmos
 using CLIMA.UnitAnnotations
-import CLIMA.UnitAnnotations: space_unit, time_unit, mass_unit, temperature_unit
+import CLIMA.UnitAnnotations: unit_annotations
 using CLIMA.VariableTemplates
 using CLIMA.MoistThermodynamics
 using CLIMA.PlanetParameters
@@ -31,10 +31,7 @@ include("mms_solution_generated.jl")
 using CLIMA.Atmos
 import CLIMA.Atmos: MoistureModel, temperature, pressure, soundspeed, total_specific_enthalpy
 
-space_unit(::AtmosModel) = u"m"
-time_unit(::AtmosModel) = u"s"
-mass_unit(::AtmosModel) = u"kg"
-temperature_unit(::AtmosModel) = u"K"
+unit_annotations(::AtmosModel) = true
 
 """
     MMSDryModel

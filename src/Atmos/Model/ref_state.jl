@@ -57,10 +57,10 @@ function atmos_init_aux!(m::HydrostaticState{P,F}, atmos::AtmosModel, aux::Vars,
   q_vap_sat = q_vap_saturation(T, ρ)
   aux.ref_state.ρq_tot = ρq_tot = ρ * m.relativehumidity * q_vap_sat
 
-  q_pt = PhasePartition(ρq_tot / (mass_unit(atmos) / space_unit(atmos)^3))
+  q_pt = PhasePartition(ρq_tot / get_unit(atmos, :density))
   aux.ref_state.ρe = ρ * internal_energy(T, q_pt)
 
-  e_kin = F(0) * (space_unit(atmos)^2 / time_unit(atmos)^2)
+  e_kin = F(0) * get_unit(atmos,:gravpot)
   e_pot = gravitational_potential(atmos.orientation, aux)
   aux.ref_state.ρe = ρ*total_energy(e_kin, e_pot, T, q_pt)
 end
@@ -99,7 +99,7 @@ function IsothermalProfile(T::U(F,:temperature)) where {F<:Real}
   IsothermalProfile{F}(T)
 end
 
-@uaware function (profile::IsothermalProfile)(orientation::Orientation, aux::Vars)
+function (profile::IsothermalProfile)(orientation::Orientation, aux::Vars)
   FT = eltype(aux)
   p = FT(MSLP) * exp(-gravitational_potential(orientation, aux)/(FT(R_d)*profile.T))
   return (profile.T, p)
@@ -127,7 +127,7 @@ $(DocStringExtensions.FIELDS)
   Γ::U(F,:lincond)
 end
 
-@uaware function (profile::LinearTemperatureProfile)(orientation::Orientation, aux::Vars)
+function (profile::LinearTemperatureProfile)(orientation::Orientation, aux::Vars)
   z = altitude(orientation, aux)
   T = max(profile.T_surface - profile.Γ*z, profile.T_min)
 

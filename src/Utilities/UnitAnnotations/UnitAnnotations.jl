@@ -1,8 +1,6 @@
 module UnitAnnotations
 
-export U, units, V, get_T, value, unit_scale, unit_alias,
-       space_unit, mass_unit, time_unit, temperature_unit,
-       unit_alias, @uaware
+export U, units, V, get_T, value, unit_scale
 
 using StaticArrays, Unitful
 import Unitful: AbstractQuantity, Units

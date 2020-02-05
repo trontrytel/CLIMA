@@ -1,3 +1,5 @@
+export get_unit, unit_alias, space_unit, time_unit, mass_unit, temperature_unit 
+
 const unit_glossary = Dict(
   :accel       => u"m/s^2",
   :force       => u"kg*m/s^2",
@@ -24,12 +26,10 @@ const unit_glossary = Dict(
 @inline unit_alias(s::Symbol) = _unit_alias(Val(s))
 @generated _unit_alias(::Val{sym}) where {sym} = upreferred(unit_glossary[sym])
 
-space_unit(x...)       = NoUnits
-time_unit(x...)        = NoUnits
-mass_unit(x...)        = NoUnits
-temperature_unit(x...) = NoUnits
+function unit_annotations end
+@inline get_unit(bl, s::Symbol) = unit_annotations(bl) ? unit_alias(s) : NoUnits
 
-velocity_unit(x...) = space_unit(x...) / time_unit(x...)
-accel_unit(x...)    = velocity_unit(x...) / time_unit(x...)
-energy_unit(x...)   = mass_unit(x...) * accel_unit(x...) * space_unit(x...)
-gravpot_unit(x...)  = energy_unit(x...) / mass_unit(x...)
+space_unit(bl)       = get_unit(bl, :space)
+time_unit(bl)        = get_unit(bl, :time)
+mass_unit(bl)        = get_unit(bl, :mass)
+temperature_unit(bl) = get_unit(bl, :temperature)

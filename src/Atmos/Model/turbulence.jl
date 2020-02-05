@@ -6,11 +6,6 @@ export ConstantViscosityWithDivergence, SmagorinskyLilly, Vreman, AnisoMinDiss
 
 abstract type TurbulenceClosure end
 
-space_unit(m::TurbulenceClosure) = u"m"
-time_unit(m::TurbulenceClosure) = u"s"
-mass_unit(m::TurbulenceClosure) = u"kg"
-temperature_unit(m::TurbulenceClosure) = u"K"
-
 vars_state(::TurbulenceClosure, FT) = @vars()
 vars_aux(::TurbulenceClosure, FT) = @vars()
 
@@ -240,8 +235,6 @@ end
 vars_aux(::Vreman,FT) = @vars(Δ::units(FT,:space))
 vars_gradient(::Vreman,FT) = @vars(θ_v::units(FT,:temperature))
 vars_diffusive(::Vreman,FT) = @vars(∇u::SMatrix{3,3,units(FT,:frequency),9}, N²::units(FT,u"s^-2"))
-space_unit(::Vreman) = u"m"
-time_unit(::Vreman) = u"s"
 
 function atmos_init_aux!(::Vreman, ::AtmosModel, aux::Vars, geom::LocalGeometry)
   aux.turbulence.Δ = lengthscale(geom)
@@ -262,14 +255,14 @@ function turbulence_tensors(m::Vreman, state::Vars, diffusive::Vars, aux::Vars, 
   S = symmetrize(α)
 
   normS = strain_rate_magnitude(S)
-  Richardson = diffusive.turbulence.N² / (normS^2 + eps(normS) / unit_alias(:time)) #FIXME
+  Richardson = diffusive.turbulence.N² / (normS^2 + eps(normS) / time_unit(m))
   f_b² = sqrt(clamp(1 - Richardson*inv_Pr_turb, 0, 1))
 
   β = f_b² * (aux.turbulence.Δ)^2 * (α' * α)
   Bβ = principal_invariants(β)[2]
 
-  z = FT(0) * unit_alias(:kinvisc)
-  ν = max(z, m.C_smag^2 * FT(2.5) * sqrt(abs(Bβ/(norm2(α)+eps(FT) / unit_alias(:time)^2)))) #FIXME
+  z = FT(0) * get_unit(m,:kinvisc)
+  ν = max(z, m.C_smag^2 * FT(2.5) * sqrt(abs(Bβ/(norm2(α)+eps(FT) / time_unit(m)^2))))
   τ = (-2*ν) * S
 
   return ν, τ
@@ -339,7 +332,7 @@ function turbulence_tensors(m::AnisoMinDiss, state::Vars, diffusive::Vars, aux::
   coeff = (aux.turbulence.Δ * m.C_poincare)^2
   βij = -(α' * α)
 
-  z = FT(0) * unit_alias(:kinvisc)
+  z = FT(0) * get_unit(m,:kinvisc)
   ν = max(z, coeff * (dot(βij, S) / (norm2(α) + eps(FT) / time_unit(m)^2)))
   τ = (-2*ν) * S
 

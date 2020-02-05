@@ -11,7 +11,7 @@ using CLIMA.ODESolvers
 using CLIMA.GenericCallbacks
 using CLIMA.Atmos
 using CLIMA.UnitAnnotations
-import CLIMA.UnitAnnotations: space_unit, time_unit, mass_unit, temperature_unit
+import CLIMA.UnitAnnotations: unit_annotations 
 using CLIMA.VariableTemplates
 using CLIMA.MoistThermodynamics
 using CLIMA.PlanetParameters
@@ -34,10 +34,7 @@ init_state!(state, aux, coords, t) = nothing
 # initial condition
 using CLIMA.Atmos: vars_aux
 
-space_unit(::AtmosModel) = u"m"
-time_unit(::AtmosModel) = u"s"
-mass_unit(::AtmosModel) = u"kg"
-temperature_unit(::AtmosModel) = u"K"
+unit_annotations(::AtmosModel) = true
 
 function run1(mpicomm, ArrayType, dim, topl, N, timeend, FT, dt)
 
