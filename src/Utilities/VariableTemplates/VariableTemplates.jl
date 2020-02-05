@@ -72,10 +72,7 @@ Base.parent(v::Vars) = getfield(v,:array)
 Base.eltype(v::Vars) = eltype(parent(v))
 Base.propertynames(::Vars{S}) where {S} = fieldnames(S)
 Base.similar(v::Vars{S,A,offset}) where {S,A,offset} = Vars{S,A,offset}(similar(parent(v)))
-
-# Figure out if this vars type supports units
-@generated UnitAnnotations.unit_annotations(v::Vars{S}, sym) where {S} =
-  (any(x->x <: AbstractQuantity, S.parameters) ? :(get_unit(sym)) : NoUnits)
+@generated UnitAnnotations.unit_annotations(v::Vars{S}) where {S} = _contains_units(S)
 
 @generated function Base.getproperty(v::Vars{S,A,offset}, sym::Symbol) where {S,A,offset}
   expr = quote
@@ -164,9 +161,7 @@ Base.parent(g::Grad) = getfield(g,:array)
 Base.eltype(g::Grad) = eltype(parent(g))
 Base.propertynames(::Grad{S}) where {S} = fieldnames(S)
 Base.similar(g::Grad{S,A,offset}) where {S,A,offset} = Grad{S,A,offset}(similar(parent(g)))
-
-@generated UnitAnnotations.unit_annotations(v::Grad{S}, sym) where {S} =
-  (any(x->x <: AbstractQuantity, S.parameters) ? :(get_unit(sym)) : NoUnits)
+@generated UnitAnnotations.unit_annotations(v::Grad{S}) where {S} = _contains_units(S)
 
 @generated function Base.getproperty(v::Grad{S,A,offset}, sym::Symbol) where {S,A,offset}
   M = size(A,1)
@@ -228,6 +223,19 @@ end
   end
   push!(expr.args, :(throw(SetVarError(sym))))
   expr
+end
+
+# Figure out if this vars or grad type supports units
+function _contains_units(S)
+  for k in fieldnames(S)
+    T = fieldtype(S,k)
+    if T <: NamedTuple
+      _contains_units(T) && return true
+    elseif eltype(T) <: AbstractQuantity
+      return true
+    end
+  end
+  false
 end
 
 end # module

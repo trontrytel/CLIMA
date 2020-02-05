@@ -1,6 +1,7 @@
 using Test, StaticArrays, Unitful
 using CLIMA.UnitAnnotations
 using CLIMA.VariableTemplates
+using CLIMA.UnitAnnotations: unit_annotations
 
 # Tests prior to providing unitful information
 
@@ -131,3 +132,9 @@ vusn.S = @SVector[0.0u"m^2/s" for i in 1:6]
                             "b.ρqt",
                             "c.ρk[1]","c.ρk[2]","c.ρk[3]","c.ρk[4]","c.ρk[5]",
                             "S[1,1]", "S[2,1]", "S[3,1]", "S[2,2]", "S[3,2]", "S[3,3]"]
+
+# Test unit detection
+@test unit_annotations(vu)
+@test !unit_annotations(v)
+@test unit_annotations(gu)
+@test !unit_annotations(g)

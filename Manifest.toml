@@ -114,17 +114,6 @@ git-tree-sha1 = "328154f6062b0053588295df6bffe22e1436597a"
 uuid = "c36e975a-824b-4404-a568-ef97ca766997"
 version = "1.1.0"
 
-[[Crayons]]
-git-tree-sha1 = "cb7a62895da739fe5bb43f1a26d4292baf4b3dc0"
-uuid = "a8cc5b0e-0ffa-5ad4-8c14-923d3ee1735f"
-version = "4.0.1"
-
-[[Cthulhu]]
-deps = ["Crayons", "InteractiveUtils", "Requires", "TerminalMenus", "Unicode"]
-git-tree-sha1 = "05966f9fe3c01f6d1723247f2401d08f003c0010"
-uuid = "f68482b8-f384-11e8-15f7-abe071a5a75f"
-version = "0.1.1"
-
 [[CuArrays]]
 deps = ["AbstractFFTs", "Adapt", "CEnum", "CUDAapi", "CUDAdrv", "CUDAnative", "DataStructures", "GPUArrays", "Libdl", "LinearAlgebra", "MacroTools", "NNlib", "Printf", "Random", "Requires", "SparseArrays", "TimerOutputs"]
 git-tree-sha1 = "e99db1397ce85975203a9d736ab37534730996ca"

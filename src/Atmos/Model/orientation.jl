@@ -3,7 +3,6 @@ import ..PlanetParameters: grav, planet_radius
 using ..UnitAnnotations
 export Orientation, NoOrientation, FlatOrientation, SphericalOrientation
 
-# FIXME
 using Unitful: numtype
 
 abstract type Orientation
@@ -19,9 +18,9 @@ end
 
 gravitational_potential(::Orientation, aux::Vars) = aux.orientation.Φ
 ∇gravitational_potential(::Orientation, aux::Vars) = aux.orientation.∇Φ
-altitude(orientation::Orientation, aux::Vars) = #FIXME
-  (gp = gravitational_potential(orientation, aux); gp / numtype(gp)(grav)) #FIXME
-vertical_unit_vector(orientation::Orientation, aux::Vars) = ∇gravitational_potential(orientation, aux) / grav #FIXME
+altitude(orientation::Orientation, aux::Vars) =
+  (gravitational_potential(orientation, aux) / eltype(aux)(grav, aux))
+vertical_unit_vector(orientation::Orientation, aux::Vars) = ∇gravitational_potential(orientation, aux) / eltype(aux)(grav, aux)
 
 
 """
