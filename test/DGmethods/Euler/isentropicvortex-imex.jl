@@ -114,16 +114,13 @@ function run(mpicomm, ArrayType, polynomialorder, numelems, setup,
   end
 
 
-  model = AtmosModel(NoOrientation(),
-                     IsentropicVortexReferenceState{FT}(setup),
-                     ConstantViscosityWithDivergence(FT(0)),
-                     DryModel(),
-                     NoPrecipitation(),
-                     NoRadiation(),
-                     NoSubsidence{FT}(),
-                     nothing,
-                     PeriodicBC(),
-                     initialcondition!)
+  model = AtmosModel{FT}(;orientation=NoOrientation(),
+                            ref_state=IsentropicVortexReferenceState{FT}(setup),
+                           turbulence=ConstantViscosityWithDivergence(FT(0)),
+                             moisture=DryModel(),
+                               source=nothing,
+                    boundarycondition=PeriodicBC(),
+                           init_state=initialcondition!)
 
   linear_model = AtmosAcousticLinearModel(model)
   nonlinear_model = RemainderModel(model, (linear_model,))

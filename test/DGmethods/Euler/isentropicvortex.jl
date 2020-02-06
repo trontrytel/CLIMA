@@ -141,16 +141,13 @@ function run(mpicomm, ArrayType, polynomialorder, numelems,
   initialcondition! = function(args...)
     isentropicvortex_initialcondition!(setup, args...)
   end
-  model = AtmosModel(NoOrientation(),
-                     NoReferenceState(),
-                     ConstantViscosityWithDivergence(0.0),
-                     DryModel(),
-                     NoPrecipitation(),
-                     NoRadiation(),
-                     NoSubsidence{FT}(),
-                     nothing,
-                     PeriodicBC(),
-                     initialcondition!)
+  model = AtmosModel{FT}(;orientation=NoOrientation(),
+                            ref_state=NoReferenceState(),
+                           turbulence=ConstantViscosityWithDivergence(0.0),
+                             moisture=DryModel(),
+                               source=nothing,
+                    boundarycondition=PeriodicBC(),
+                           init_state=initialcondition!)
 
   dg = DGModel(model, grid, NumericalFlux(),
                CentralNumericalFluxDiffusive(), CentralNumericalFluxGradient())

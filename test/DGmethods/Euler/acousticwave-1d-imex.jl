@@ -72,16 +72,12 @@ function run(mpicomm, polynomialorder, numelem_horz, numelem_vert,
                                           polynomialorder = polynomialorder,
                                           meshwarp = cubedshellwarp)
 
-  model = AtmosModel(SphericalOrientation(),
-                     HydrostaticState(IsothermalProfile(setup.T_ref), FT(0)),
-                     ConstantViscosityWithDivergence(FT(0)),
-                     DryModel(),
-                     NoPrecipitation(),
-                     NoRadiation(),
-                     NoSubsidence{FT}(),
-                     Gravity(),
-                     NoFluxBC(),
-                     setup)
+  model = AtmosModel{FT}(;orientation=SphericalOrientation(),
+                            ref_state=HydrostaticState(IsothermalProfile(setup.T_ref), FT(0)),
+                           turbulence=ConstantViscosityWithDivergence(FT(0)),
+                             moisture=DryModel(),
+                               source=Gravity(),
+                           init_state=setup)
   linearmodel = AtmosAcousticGravityLinearModel(model)
 
   dg = DGModel(model, grid, Rusanov(),

@@ -110,16 +110,13 @@ function run(mpicomm, ArrayType, polynomialorder, numelems, setup,
     isentropicvortex_initialcondition!(setup, args...)
   end
 
-  model = AtmosModel(NoOrientation(),
-                     IsentropicVortexReferenceState{FT}(setup),
-                     ConstantViscosityWithDivergence(FT(0)),
-                     DryModel(),
-                     NoPrecipitation(),
-                     NoRadiation(),
-                     NoSubsidence{FT}(),
-                     nothing,
-                     PeriodicBC(),
-                     initialcondition!)
+  model = AtmosModel{FT}(;orientation=NoOrientation(),
+                            ref_state=IsentropicVortexReferenceState{FT}(setup),
+                           turbulence=ConstantViscosityWithDivergence(FT(0)),
+                             moisture=DryModel(),
+                               source=nothing,
+                    boundarycondition=PeriodicBC(),
+                           init_state=initialcondition!)
   # The linear model has the fast time scales
   fast_model = AtmosAcousticLinearModel(model)
   # The nonlinear model has the slow time scales
