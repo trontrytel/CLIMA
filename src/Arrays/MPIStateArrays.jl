@@ -19,8 +19,8 @@ Base.similar(::Type{A}, ::Type{FT}, dims...) where {A<:Array, FT} = similar(Arra
   Base.similar(::Type{A}, ::Type{FT}, dims...) where {A<:CuArray, FT} = similar(CuArray{FT}, dims...)
 end
 
-include("Buffers.jl")
-using .Buffers
+include("CMBuffers.jl")
+using .CMBuffers
 
 cpuify(x::AbstractArray) = convert(Array, x)
 cpuify(x::Real) = x
@@ -32,7 +32,7 @@ export MPIStateArray, euclidean_distance, weightedsum
                   DAT2<:AbstractArray{FT,2}} <: AbstractArray{FT, 3}
 """
 struct MPIStateArray{FT, DATN<:AbstractArray{FT,3}, DAI1, DAV,
-                    Buf<:Buffer} <: AbstractArray{FT, 3}
+                    Buf<:CMBuffer} <: AbstractArray{FT, 3}
   mpicomm::MPI.Comm
   data::DATN
   realdata::DAV
@@ -59,18 +59,18 @@ struct MPIStateArray{FT, DATN<:AbstractArray{FT,3}, DAI1, DAV,
 
   function MPIStateArray{FT}(mpicomm, DA, Np, nstate, numelem, realelems,
                              ghostelems, vmaprecv, vmapsend, nabrtorank,
-                             nabrtovmaprecv, nabrtovmapsend, weights, commtag
+                             nabrtovmaprecv, nabrtovmapsend, weights, commtag;
+                             mpi_knows_cuda=false
                             ) where {FT}
     data = similar(DA, FT, Np, nstate, numelem)
 
-    # XXX: Switch to SingleBuffer for CUDA-aware MPI
-    if data isa Array
-      kind = SingleBuffer
+    if data isa Array || mpi_knows_cuda
+      kind = SingleCMBuffer
     else
-      kind = DoubleBuffer
+      kind = DoubleCMBuffer
     end
-    recv_buffer = Buffer{FT}(DA, kind, nstate, length(vmaprecv))
-    send_buffer = Buffer{FT}(DA, kind, nstate, length(vmapsend))
+    recv_buffer = CMBuffer{FT}(DA, kind, nstate, length(vmaprecv))
+    send_buffer = CMBuffer{FT}(DA, kind, nstate, length(vmapsend))
 
     realdata = view(data, ntuple(i -> Colon(), ndims(data) - 1)..., realelems)
     DAV = typeof(realdata)
@@ -154,7 +154,8 @@ function MPIStateArray{FT}(mpicomm, DA, Np, nstate, numelem;
                            nabrtovmaprecv=Array{UnitRange{Int64}}(undef, 0),
                            nabrtovmapsend=Array{UnitRange{Int64}}(undef, 0),
                            weights=nothing,
-                           commtag=888
+                           commtag=888,
+                           mpi_knows_cuda=false
                           ) where {FT}
 
   if weights == nothing
@@ -162,7 +163,8 @@ function MPIStateArray{FT}(mpicomm, DA, Np, nstate, numelem;
   end
   MPIStateArray{FT}(mpicomm, DA, Np, nstate, numelem, realelems, ghostelems,
                     vmaprecv, vmapsend, nabrtorank, nabrtovmaprecv,
-                    nabrtovmapsend, weights, commtag)
+                    nabrtovmapsend, weights, commtag,
+                    mpi_knows_cuda=mpi_knows_cuda)
 end
 
 # FIXME: should general cases be handled?

@@ -107,6 +107,7 @@ function create_auxstate(bl, grid, commtag=222)
   nrealelem = length(topology.realelems)
   @launch(device, threads=(Np,), blocks=nrealelem,
           initauxstate!(bl, Val(dim), Val(polyorder), auxstate.data, vgeo, topology.realelems))
+  @synchronize
   MPIStateArrays.start_ghost_exchange!(auxstate)
   MPIStateArrays.finish_ghost_exchange!(auxstate)
 
