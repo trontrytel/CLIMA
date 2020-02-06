@@ -303,6 +303,8 @@ function atmos_boundary_state!(::CentralNumericalFluxDiffusive, bc::RayleighBena
 end
 
 
+#TODO: Update w.r.t. new b.c.  interface
+#TODO: Verify top wall boundaries
 """
   SurfaceDrivenBubbleBC <: BoundaryCondition
 
