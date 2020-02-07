@@ -78,10 +78,15 @@ end
 function PhaseEquil(e_int::FT,
                     ρ::FT,
                     q_tot::FT,
-                    tol::FT=FT(1e-1),
                     maxiter::Int=3,
-                    sat_adjust::F=saturation_adjustment) where {FT<:Real,F}
-    return PhaseEquil{FT}(e_int, ρ, q_tot, sat_adjust(e_int, ρ, q_tot, tol, maxiter))
+                    tol::FT=FT(1e-1),
+                    sat_adjust::F=saturation_adjustment
+                    ) where {FT<:Real,F}
+    # TODO: Remove these safety nets, or at least add warnings
+    # waiting on fix: github.com/vchuravy/GPUifyLoops.jl/issues/104
+    q_tot_safe = max(q_tot, FT(0))
+    q_tot_safe = min(q_tot_safe, FT(1))
+    return PhaseEquil{FT}(e_int, ρ, q_tot_safe, sat_adjust(e_int, ρ, q_tot_safe, tol, maxiter))
 end
 
 """
@@ -118,8 +123,8 @@ Constructs a [`PhaseEquil`](@ref) thermodynamic state from:
 function LiquidIcePotTempSHumEquil(θ_liq_ice::FT,
                                    ρ::FT,
                                    q_tot::FT,
-                                   tol::FT=FT(1e-1),
-                                   maxiter::Int=30
+                                   maxiter::Int=30,
+                                   tol::FT=FT(1e-1)
                                    ) where {FT<:Real}
     T = saturation_adjustment_q_tot_θ_liq_ice(θ_liq_ice, ρ, q_tot, tol, maxiter)
     q_pt = PhasePartition_equil(T, ρ, q_tot)
@@ -141,8 +146,9 @@ Constructs a [`PhaseEquil`](@ref) thermodynamic state from:
 function LiquidIcePotTempSHumEquil_given_pressure(θ_liq_ice::FT,
                                                   p::FT,
                                                   q_tot::FT,
-                                                  tol::FT=FT(1e-1),
-                                                  maxiter::Int=30) where {FT<:Real}
+                                                  maxiter::Int=30,
+                                                  tol::FT=FT(1e-1)
+                                                  ) where {FT<:Real}
     T = saturation_adjustment_q_tot_θ_liq_ice_given_pressure(θ_liq_ice, p, q_tot, tol, maxiter)
     ρ = air_density(T, p, PhasePartition(q_tot))
     q = PhasePartition_equil(T, ρ, q_tot)
@@ -205,8 +211,8 @@ and, optionally
 function LiquidIcePotTempSHumNonEquil(θ_liq_ice::FT,
                                       ρ::FT,
                                       q_pt::PhasePartition{FT},
-                                      tol::FT=FT(1e-1),
-                                      maxiter::Int=5
+                                      maxiter::Int=5,
+                                      tol::FT=FT(1e-1)
                                       ) where {FT<:Real}
     T = air_temperature_from_liquid_ice_pottemp_non_linear(θ_liq_ice, ρ, tol, maxiter, q_pt)
     e_int = internal_energy(T, q_pt)

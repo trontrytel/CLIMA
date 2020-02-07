@@ -36,7 +36,9 @@ vars_aux(lm::AtmosLinearModel, FT) = vars_aux(lm.atmos,FT)
 vars_integrals(lm::AtmosLinearModel, FT) = @vars()
 
 
-update_aux!(dg::DGModel, lm::AtmosLinearModel, Q::MPIStateArray, t::Real) = nothing
+function update_aux!(dg::DGModel, lm::AtmosLinearModel, Q::MPIStateArray, t::Real)
+  return false
+end
 integrate_aux!(lm::AtmosLinearModel, integ::Vars, state::Vars, aux::Vars) = nothing
 flux_diffusive!(lm::AtmosLinearModel, flux::Grad, state::Vars, diffusive::Vars, aux::Vars, t::Real) = nothing
 function wavespeed(lm::AtmosLinearModel, nM, state::Vars, aux::Vars, t::Real)
@@ -44,10 +46,10 @@ function wavespeed(lm::AtmosLinearModel, nM, state::Vars, aux::Vars, t::Real)
   return soundspeed_air(ref.T)
 end
 
-function boundary_state!(nf::Rusanov, lm::AtmosLinearModel, x...)
+function boundary_state!(nf::NumericalFluxNonDiffusive, lm::AtmosLinearModel, x...)
   atmos_boundary_state!(nf, NoFluxBC(), lm.atmos, x...)
 end
-function boundary_state!(nf::CentralNumericalFluxDiffusive, lm::AtmosLinearModel, x...)
+function boundary_state!(nf::NumericalFluxDiffusive, lm::AtmosLinearModel, x...)
   nothing
 end
 init_aux!(lm::AtmosLinearModel, aux::Vars, geom::LocalGeometry) = nothing

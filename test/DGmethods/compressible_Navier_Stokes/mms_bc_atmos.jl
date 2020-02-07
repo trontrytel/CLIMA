@@ -18,8 +18,6 @@ using Logging, Printf, Dates
 using CLIMA.VTK
 using Test
 
-const ArrayType = CLIMA.array_type()
-
 if !@isdefined integration_testing
   const integration_testing =
     parse(Bool, lowercase(get(ENV,"JULIA_CLIMA_INTEGRATION_TESTING","false")))
@@ -92,7 +90,7 @@ end
 
 # initial condition
 
-function run(mpicomm, dim, topl, warpfun, N, timeend, FT, dt)
+function run(mpicomm, ArrayType, dim, topl, warpfun, N, timeend, FT, dt)
 
   grid = DiscontinuousSpectralElementGrid(topl,
                                           FloatType = FT,
@@ -106,6 +104,7 @@ function run(mpicomm, dim, topl, warpfun, N, timeend, FT, dt)
                        NoReferenceState(),
                        ConstantViscosityWithDivergence(FT(μ_exact)),
                        MMSDryModel(),
+                       NoPrecipitation(),
                        NoRadiation(),
                        NoSubsidence{FT}(),
                        mms2_source!,
@@ -116,6 +115,7 @@ function run(mpicomm, dim, topl, warpfun, N, timeend, FT, dt)
                        NoReferenceState(),
                        ConstantViscosityWithDivergence(FT(μ_exact)),
                        MMSDryModel(),
+                       NoPrecipitation(),
                        NoRadiation(),
                        NoSubsidence{FT}(),
                        mms3_source!,
@@ -127,7 +127,7 @@ function run(mpicomm, dim, topl, warpfun, N, timeend, FT, dt)
                grid,
                Rusanov(),
                CentralNumericalFluxDiffusive(),
-               CentralGradPenalty())
+               CentralNumericalFluxGradient())
 
   Q = init_ode_state(dg, FT(0))
   Qcpu = init_ode_state(dg, FT(0); forcecpu=true)
@@ -179,6 +179,8 @@ end
 
 let
   CLIMA.init()
+  ArrayType = CLIMA.array_type()
+
   mpicomm = MPI.COMM_WORLD
   ll = uppercase(get(ENV, "JULIA_LOG_LEVEL", "INFO"))
   loglevel = ll == "DEBUG" ? Logging.Debug :
@@ -186,65 +188,64 @@ let
     ll == "ERROR" ? Logging.Error : Logging.Info
   logger_stream = MPI.Comm_rank(mpicomm) == 0 ? stderr : devnull
   global_logger(ConsoleLogger(logger_stream, loglevel))
-  
+
   polynomialorder = 4
   base_num_elem = 4
 
-  expected_result = [1.5606126271800694e-01 5.3315235468477966e-03 2.2572701271274964e-04;
-                     2.5754410198970158e-02 1.1781217145186288e-03 6.1752962472904071e-05]
-lvls = integration_testing ? size(expected_result, 2) : 1
+  expected_result = [1.5834569096502649e-01 5.3705043093160857e-03 2.2780398026991879e-04;
+                     2.6050771352440709e-02 1.1953830539519587e-03 6.2139835471113376e-05]
+  lvls = integration_testing ? size(expected_result, 2) : 1
 
-for FT in (Float64,) #Float32)
-  result = zeros(FT, lvls)
-  for dim = 2:3
-    for l = 1:lvls
-      if dim == 2
-        Ne = (2^(l-1) * base_num_elem, 2^(l-1) * base_num_elem)
-        brickrange = (range(FT(0); length=Ne[1]+1, stop=1),
-                      range(FT(0); length=Ne[2]+1, stop=1))
-        topl = BrickTopology(mpicomm, brickrange,
-                             periodicity = (false, false))
-        dt = 1e-2 / Ne[1]
-        warpfun = (x1, x2, _) -> begin
-          (x1 + sin(x1*x2), x2 + sin(2*x1*x2), 0)
-        end
+  @testset "mms_bc_atmos" begin
+    for FT in (Float64,) #Float32)
+      result = zeros(FT, lvls)
+      for dim = 2:3
+        for l = 1:lvls
+          if dim == 2
+            Ne = (2^(l-1) * base_num_elem, 2^(l-1) * base_num_elem)
+            brickrange = (range(FT(0); length=Ne[1]+1, stop=1),
+                          range(FT(0); length=Ne[2]+1, stop=1))
+            topl = BrickTopology(mpicomm, brickrange,
+                                 periodicity = (false, false))
+            dt = 1e-2 / Ne[1]
+            warpfun = (x1, x2, _) -> begin
+              (x1 + sin(x1*x2), x2 + sin(2*x1*x2), 0)
+            end
 
-      elseif dim == 3
-        Ne = (2^(l-1) * base_num_elem, 2^(l-1) * base_num_elem)
-        brickrange = (range(FT(0); length=Ne[1]+1, stop=1),
-                      range(FT(0); length=Ne[2]+1, stop=1),
-        range(FT(0); length=Ne[2]+1, stop=1))
-        topl = BrickTopology(mpicomm, brickrange,
-                             periodicity = (false, false, false))
-        dt = 5e-3 / Ne[1]
-        warpfun = (x1, x2, x3) -> begin
-          (x1 + (x1-1/2)*cos(2*π*x2*x3)/4,
-           x2 + exp(sin(2π*(x1*x2+x3)))/20,
-          x3 + x1/4 + x2^2/2 + sin(x1*x2*x3))
-        end
-      end
-      timeend = 1
-      nsteps = ceil(Int64, timeend / dt)
-      dt = timeend / nsteps
+          elseif dim == 3
+            Ne = (2^(l-1) * base_num_elem, 2^(l-1) * base_num_elem)
+            brickrange = (range(FT(0); length=Ne[1]+1, stop=1),
+                          range(FT(0); length=Ne[2]+1, stop=1),
+            range(FT(0); length=Ne[2]+1, stop=1))
+            topl = BrickTopology(mpicomm, brickrange,
+                                 periodicity = (false, false, false))
+            dt = 5e-3 / Ne[1]
+            warpfun = (x1, x2, x3) -> begin
+              (x1 + (x1-1/2)*cos(2*π*x2*x3)/4,
+               x2 + exp(sin(2π*(x1*x2+x3)))/20,
+              x3 + x1/4 + x2^2/2 + sin(x1*x2*x3))
+            end
+          end
+          timeend = 1
+          nsteps = ceil(Int64, timeend / dt)
+          dt = timeend / nsteps
 
-      @info (ArrayType, FT, dim)
-      result[l] = run(mpicomm, dim, topl, warpfun,
-                      polynomialorder, timeend, FT, dt)
-      @test result[l] ≈ FT(expected_result[dim-1, l])
-    end
-    if integration_testing
-      @info begin
-        msg = ""
-        for l = 1:lvls-1
-          rate = log2(result[l]) - log2(result[l+1])
-          msg *= @sprintf("\n  rate for level %d = %e\n", l, rate)
+          @info (ArrayType, FT, dim)
+          result[l] = run(mpicomm, ArrayType, dim, topl, warpfun,
+                          polynomialorder, timeend, FT, dt)
+          @test result[l] ≈ FT(expected_result[dim-1, l])
         end
-        msg
+        if integration_testing
+          @info begin
+            msg = ""
+            for l = 1:lvls-1
+              rate = log2(result[l]) - log2(result[l+1])
+              msg *= @sprintf("\n  rate for level %d = %e\n", l, rate)
+            end
+            msg
+          end
+        end
       end
     end
   end
 end
-end
-
-
-#nothing

@@ -43,6 +43,7 @@ function Initialize_Brick_Interpolation_Test!(state::Vars, aux::Vars, (x,y,z), t
     state.ρu    = SVector{3,FT}(0,0,0)
     state.ρe    = FT(0)
     state.moisture.ρq_tot = FT(0)
+
 end
 #------------------------------------------------
 #------------------------------------------------
@@ -95,6 +96,7 @@ function run_brick_interpolation_test()
                      NoReferenceState(),
 					 ConstantViscosityWithDivergence(FT(0)),
                      EquilMoist(),
+                     NoPrecipitation(),
                      NoRadiation(),
                      NoSubsidence{FT}(),
                      (Gravity()),
@@ -105,14 +107,13 @@ function run_brick_interpolation_test()
                grid,
                Rusanov(),
                CentralNumericalFluxDiffusive(),
-               CentralGradPenalty())
+               CentralNumericalFluxGradient())
 
     Q = init_ode_state(dg, FT(0))
     #------------------------------
     x1 = @view grid.vgeo[:,_x,:]
     x2 = @view grid.vgeo[:,_y,:]
     x3 = @view grid.vgeo[:,_z,:]
- 
 
     #fcn(x,y,z) = x .* y .* z # sample function
     fcn(x,y,z) = sin.(x) .* cos.(y) .* cos.(z) # sample function
@@ -131,6 +132,7 @@ function run_brick_interpolation_test()
     xbnd[1,1] = FT(xmin); xbnd[2,1] = FT(xmax)
     xbnd[1,2] = FT(ymin); xbnd[2,2] = FT(ymax)
     xbnd[1,3] = FT(zmin); xbnd[2,3] = FT(zmax)
+
 
     if pid==0 
         println("interpolation setup")
@@ -182,7 +184,6 @@ function run_brick_interpolation_test()
     #----------------
 end #function run_brick_interpolation_test
 
-
 #Base.@kwdef struct TestSphereSetup{FT}
 #  p_ground::FT = MSLP
 #  T_initial::FT = 255
@@ -198,6 +199,7 @@ struct TestSphereSetup{DT}
   function TestSphereSetup(p_ground::DT, T_initial::DT, domain_height::DT) where DT <: AbstractFloat
     return new{DT}(p_ground, T_initial, domain_height)
   end
+
 end
 #----------------------------------------------------------------------------
 function (setup::TestSphereSetup)(state, aux, coords, t) 
@@ -236,6 +238,7 @@ end
 #----------------------------------------------------------------------------
 function run_cubed_sphere_interpolation_test()
     CLIMA.init()
+    ArrayType = CLIMA.array_type()
 
     DA = CLIMA.array_type()
     FT = Float64 #Float32 #Float64
@@ -254,7 +257,7 @@ function run_cubed_sphere_interpolation_test()
     logger_stream = MPI.Comm_rank(mpicomm) == 0 ? stderr : devnull
     global_logger(ConsoleLogger(logger_stream, loglevel))
 
-    domain_height = FT(30e3) 
+    domain_height = FT(30e3)
 
     polynomialorder = 5#5#12#5# 12#1#4 #5
     numelem_horz = 6#4 #6
@@ -267,7 +270,6 @@ function run_cubed_sphere_interpolation_test()
     vert_range = grid1d(FT(planet_radius), FT(planet_radius + domain_height), nelem = numelem_vert)
 
  #   vert_range = grid1d(FT(1.0), FT(2.0), nelem = numelem_vert)
-  
 #    lat_res  = FT( 10 * π / 180.0) # 5 degree resolution
 #    long_res = FT( 10 * π / 180.0) # 5 degree resolution
     #lat_res  = FT( 1 * π / 180.0) # 5 degree resolution
@@ -277,6 +279,7 @@ function run_cubed_sphere_interpolation_test()
     #nel_vert_grd  = 100 #100 #50 #10#50
     nel_vert_grd  = 20 #100 #50 #10#50
     r_res    = FT((vert_range[end] - vert_range[1])/FT(nel_vert_grd)) #1000.00    # 1000 m vertical resolution
+
 
     #----------------------------------------------------------
     setup = TestSphereSetup(FT(MSLP),FT(255),FT(30e3))
@@ -293,14 +296,15 @@ function run_cubed_sphere_interpolation_test()
                        NoReferenceState(),
                        ConstantViscosityWithDivergence(FT(0)),
                        DryModel(),
+                       NoPrecipitation(),
                        NoRadiation(),
                        NoSubsidence{FT}(),
-                       nothing, 
+                       nothing,
                        NoFluxBC(),
                        setup)
 
     dg = DGModel(model, grid, Rusanov(),
-                 CentralNumericalFluxDiffusive(), CentralGradPenalty())
+                 CentralNumericalFluxDiffusive(), CentralNumericalFluxGradient())
 
     Q = init_ode_state(dg, FT(0))
 
@@ -332,7 +336,6 @@ function run_cubed_sphere_interpolation_test()
 
 #    @time intrp_cs = InterpolationCubedSphere(grid, collect(vert_range), numelem_horz, lat_res, long_res, r_res)
 #end
-
     svi = interpolate_cubed_sphere!(intrp_cs, Q.data) # interpolates state vector onto svi
 #    for i in 1:20
 #        @time interpolate_cubed_sphere_local!(intrp_cs, Q.data, iv)#,Val(qm1))

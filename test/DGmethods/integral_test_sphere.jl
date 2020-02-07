@@ -12,8 +12,6 @@ using LinearAlgebra
 using Logging
 using GPUifyLoops
 
-const ArrayType = CLIMA.array_type()
-
 import CLIMA.DGmethods: BalanceLaw, vars_aux, vars_state, vars_gradient,
                         vars_diffusive, vars_integrals, integrate_aux!,
                         flux_nondiffusive!, flux_diffusive!, source!, wavespeed,
@@ -31,6 +29,8 @@ end
 function update_aux!(dg::DGModel, m::IntegralTestSphereModel, Q::MPIStateArray, t::Real)
   indefinite_stack_integral!(dg, m, Q, dg.auxstate, t)
   reverse_indefinite_stack_integral!(dg, m, dg.auxstate, t)
+
+  return true
 end
 
 vars_integrals(::IntegralTestSphereModel, T) = @vars(v::T)
@@ -79,7 +79,7 @@ function run(mpicomm, topl, ArrayType, N, FT, Rinner, Router)
                grid,
                Rusanov(),
                CentralNumericalFluxDiffusive(),
-               CentralGradPenalty())
+               CentralNumericalFluxGradient())
 
   Q = init_ode_state(dg, FT(0))
   dQdt = similar(Q)
@@ -91,6 +91,8 @@ end
 
 let
   CLIMA.init()
+  ArrayType = CLIMA.array_type()
+
   mpicomm = MPI.COMM_WORLD
   ll = uppercase(get(ENV, "JULIA_LOG_LEVEL", "INFO"))
   loglevel = ll == "DEBUG" ? Logging.Debug :
@@ -140,4 +142,3 @@ let
 end
 
 nothing
-
