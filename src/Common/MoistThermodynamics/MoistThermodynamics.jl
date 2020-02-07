@@ -697,7 +697,7 @@ using Newtons method with analytic gradients.
 
 See also [`saturation_adjustment`](@ref).
 """
-function saturation_adjustment(e_int::U(FT,:energypv), ρ::U(FT,:density), q_tot::FT, tol::FT, maxiter::Int) where {FT<:Real}
+function saturation_adjustment(e_int::U(FT,:gravpot), ρ::U(FT,:density), q_tot::FT, tol::FT, maxiter::Int) where {FT<:Real}
   bl = MT()
   T_1 = max(FT(T_min,bl), air_temperature(e_int, PhasePartition(q_tot))) # Assume all vapor
   q_v_sat = q_vap_saturation(T_1, ρ)

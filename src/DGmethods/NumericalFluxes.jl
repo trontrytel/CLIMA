@@ -46,7 +46,7 @@ function numerical_flux_gradient!(::CentralNumericalFluxGradient, bl::BalanceLaw
   grad_types = T / space_unit(bl)
 
   G = n .* (parent(transform⁺) .+ parent(transform⁻))' ./ 2
-  diffusive!(bl, diff, Grad{grad_types}(G), state⁻, aux⁻, t)
+  diffusive!(bl, fluxᵀn, Grad{grad_types}(G), state⁻, aux⁻, t)
 end
 
 function numerical_boundary_flux_gradient!(nf::CentralNumericalFluxGradient,
@@ -57,12 +57,13 @@ function numerical_boundary_flux_gradient!(nf::CentralNumericalFluxGradient,
                                            state⁺::Vars{S}, aux⁺::Vars{A},
                                            bctype, t, state1⁻::Vars{S},
                                            aux1⁻::Vars{A}) where {D,T,S,A}
+  grad_types = T / space_unit(bl)
 
   boundary_state!(nf, bl, state⁺, aux⁺, n, state⁻, aux⁻, bctype, t, state1⁻,
                   aux1⁻)
   gradvariables!(bl, transform⁺, state⁺, aux⁺, t)
   G = n .* parent(transform⁺)'
-  diffusive!(bl, fluxᵀn, Grad{T}(G), state⁻, aux⁻, t)
+  diffusive!(bl, fluxᵀn, Grad{grad_types}(G), state⁻, aux⁻, t)
 end
 
 
@@ -128,7 +129,7 @@ function numerical_flux_nondiffusive!(nf::Rusanov,
   λ⁻ = wavespeed(bl, n, state⁻, aux⁻, t)
   λ⁺ = wavespeed(bl, n, state⁺, aux⁺, t)
   λ = max(λ⁻, λ⁺)
-  units = space_unit(bl) / time_unit(bl)
+  units = get_unit(bl,:velocity)
   λΔQ = (λ / units) * (parent(state⁻) - parent(state⁺))
 
   # TODO: should this operate on ΔQ or λΔQ?
@@ -154,7 +155,7 @@ struct CentralNumericalFluxNonDiffusive <: NumericalFluxNonDiffusive end
 function numerical_flux_nondiffusive!(::CentralNumericalFluxNonDiffusive,
     bl::BalanceLaw, fluxᵀn::Vars{S}, n::SVector,
     state⁻::Vars{S}, aux⁻::Vars{A}, state⁺::Vars{S}, aux⁺::Vars{A}, t) where {S,A}
-  flux_types = S * (space_unit(bl) / time_unit(bl))
+  flux_types = S * get_unit(bl,:velocity)
 
   FT = eltype(fluxᵀn)
   nstate = num_state(bl,FT)
@@ -217,7 +218,7 @@ function numerical_flux_diffusive!(::CentralNumericalFluxDiffusive,
   state⁻::Vars{S}, diff⁻::Vars{D}, aux⁻::Vars{A},
   state⁺::Vars{S}, diff⁺::Vars{D}, aux⁺::Vars{A}, t) where {S,D,A}
 
-  flux_types = S * (space_unit(bl) / time_unit(bl))
+  flux_types = S * get_unit(bl,:velocity)
 
   FT = eltype(fluxᵀn)
   nstate = num_state(bl,FT)
@@ -252,7 +253,7 @@ function normal_boundary_flux_diffusive!(nf,
                                          bctype, t,
                                          state1⁻, diff1⁻, aux1⁻) where {S}
 
-  flux_types = S * (space_unit(bl) / time_unit(bl))
+  flux_types = S * get_unit(bl,:velocity)
 
   FT = eltype(fluxᵀn)
   nstate = num_state(bl,FT)
@@ -261,7 +262,7 @@ function normal_boundary_flux_diffusive!(nf,
   F = similar(Fᵀn, Size(3, nstate))
   fill!(F, -zero(FT))
   boundary_flux_diffusive!(nf, bl,
-                           Grad{grad_types}(F),
+                           Grad{flux_types}(F),
                            state⁺, diff⁺, aux⁺,
                            n⁻,
                            state⁻, diff⁻, aux⁻,
