@@ -4,7 +4,12 @@ import Unitful: AbstractQuantity, Units
 
 import ..UnitAnnotations: unit_annotations
 
-export @parameter, @exportparameter, ParametersType
+export @parameter, @exportparameter, ParametersType, TestCaseUnitRemove
+
+abstract type AbstractTestCaseUnitRemove end
+struct TestCaseUnitRemove <: AbstractTestCaseUnitRemove end
+
+unit_remove(::AbstractTestCaseUnitRemove) = false
 
 """
     Parameter{sym} <: Base.AbstractIrrational
@@ -102,14 +107,15 @@ macro exportparameter(sym, val, desc)
   ev = getval(@eval(__module__, $val))
 
   exportcmd = :(export $sym)
+  ur = TestCaseUnitRemove()
 
   quote
     $exportcmd
     const $esym = Parameter{$qsym}()
     # FIXME: shouldn't really allow constructors to return other types
-    Base.Float64(::Parameter{$qsym}) = $(Float64(ustrip(ev)) * upreferred(unit(ev)))
+    Base.Float64(::Parameter{$qsym}) = unit_remove($ur) ? $(Float64(ustrip(ev))) : $(Float64(ustrip(ev)) * upreferred(unit(ev)))
     Base.Float64(p::Parameter{$qsym}, bl) = (v = Float64(p); unit_annotations(bl) ? v : ustrip(v))
-    Base.Float32(::Parameter{$qsym}) = $(Float32(ustrip(ev)) * upreferred(unit(ev)))
+    Base.Float32(::Parameter{$qsym}) = unit_remove($ur) ? $(Float32(ustrip(ev))) : $(Float32(ustrip(ev)) * upreferred(unit(ev)))
     Base.Float32(p::Parameter{$qsym}, bl) = (v = Float32(p); unit_annotations(bl) ? v : ustrip(v))
     Base.string(::Parameter{$qsym}) = $(string(ev))
     ParametersType.getval(::Parameter{$qsym}) = $(esc(upreferred(getval(ev))))

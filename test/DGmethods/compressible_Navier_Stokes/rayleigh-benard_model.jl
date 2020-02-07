@@ -51,6 +51,7 @@ const C_smag    = 0.18
 
 unit_annotations(::AtmosModel) = true
 unit_annotations(::MoistThermodynamics.MT) = true
+unit_annotations(::Atmos.AnisoMinDiss) = true
 
 # ------------- Initial condition function ----------- #
 function initialise_rayleigh_benard!(state::Vars, aux::Vars, coord, t)
