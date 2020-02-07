@@ -90,14 +90,6 @@ function PhaseEquil(e_int::U(FT,:gravpot),
   return PhaseEquil{FT}(e_int, ρ, q_tot_safe, sat_adjust(e_int, ρ, q_tot_safe, tol, maxiter))
 end
 
-# function PhaseEquil(e_int::U(FT,:gravpot),
-#                     ρ::U(FT,:density),
-#                     q_tot::FT,
-#                     T::U(FT,:temperature)
-#                     ) where {FT<:Real,F}
-#   return PhaseEquil{FT}(e_int, ρ, q_tot, T)
-# end
-
 """
     PhaseDry{FT} <: ThermodynamicState
 
@@ -251,16 +243,17 @@ end
 
 Fixed lapse rate hydrostatic reference state
 """
-function fixed_lapse_rate_ref_state(z::FT,
-                                    T_surface::FT,
-                                    T_min::FT) where {FT<:AbstractFloat}
-  Γ = FT(grav)/FT(cp_d)
+function fixed_lapse_rate_ref_state(z::U(FT,:space),
+                                    T_surface::U(FT,:temperature),
+                                    T_min::U(FT,:temperature)) where {FT<:AbstractFloat}
+  bl = MT()
+  Γ = FT(grav,bl)/FT(cp_d,bl)
   z_tropopause = (T_surface - T_min) / Γ
-  H_min = FT(R_d) * T_min / FT(grav)
+  H_min = FT(R_d,bl) * T_min / FT(grav,bl)
   T = max(T_surface - Γ*z, T_min)
-  p = FT(MSLP)*(T / T_surface)^(FT(grav)/(FT(R_d)*Γ))
-  T == T_min && (p = p * exp(-(z-z_tropopause)/FT(H_min)))
-  ρ = p / (FT(R_d) * T)
+  p = FT(MSLP,bl)*(T / T_surface)^(FT(grav,bl)/(FT(R_d,bl)*Γ))
+  T == T_min && (p = p * exp(-(z-z_tropopause)/H_min))
+  ρ = p / (FT(R_d,bl) * T)
   return T,p,ρ
 end
 

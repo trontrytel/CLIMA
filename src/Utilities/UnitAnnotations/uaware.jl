@@ -68,32 +68,29 @@ macro uaware(ex)
 
     # Lastly provide the constructors
     constr_unitless = quote
-        function (::Type{$name{$(p1...)}})($(params_unitless...)) where {$(p1...)}
+      function ($name{$(p1...)})($(params_unitless...)) where {$(p1...)}
+        $lname{$(p1...)}($(attrs_unitless...))
+      end
+      function $name($(params_unitless...)) where {$(p1...)}
         $lname{$(p1...)}($(attrs_unitless...))
       end
     end
     constr_unitful = quote
-        function (::Type{$name{$(p1...)}})($(params_unitful... )) where {$(p1...)}
+      function ($name{$(p1...)})($(params_unitful... )) where {$(p1...)}
+        $uname{$(p1...)}($(attrs_unitful...))
+      end
+      function $name($(params_unitful... )) where {$(p1...)}
         $uname{$(p1...)}($(attrs_unitful...))
       end
     end
 
-    #= return quote =#
-    #=                 $unitless =#
-    #=   Base.@__doc__ $unitful =#
-    #=                 $union =#
-    #=                 $constr_unitless =#
-    #=                 $constr_unitful =#
-    #= end |> esc =#
-    q =  quote
+    return quote
                     $unitless
       Base.@__doc__ $unitful
                     $union
                     $constr_unitless
                     $constr_unitful
-    end
-    #= @show prettify(q) =#
-    return esc(q)
+    end |> esc
   end
 
   error("Expected a structure or function definition for annotation.")
@@ -118,4 +115,7 @@ end
 # Quick test
 @uaware struct Foo{FT}
   x::U(FT,:massflux)
+  y::U(FT,:space)
 end
+
+Foo{Float32}(1.0f0,1.0f0)

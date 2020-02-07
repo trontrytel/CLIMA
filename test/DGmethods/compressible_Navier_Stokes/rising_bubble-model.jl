@@ -43,6 +43,7 @@ const timeend   = 10dt
 unit_annotations(::AtmosModel) = true
 unit_annotations(::AtmosModel.AtmosLinearModel) = true
 unit_annotations(::Atmos.Vreman) = true
+unit_annotations(::MoistThermodynamics.MT) = true
 
 # ------------- Initial condition function ----------- #
 """

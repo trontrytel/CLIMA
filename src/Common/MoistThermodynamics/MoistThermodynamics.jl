@@ -48,7 +48,6 @@ export vapor_specific_humidity
 
 # FIXME
 struct MT end # Should extend BalanceLaw
-unit_annotations(::MT) = true # FIXME - do this instead at a driver level
 
 include("states.jl")
 
@@ -146,6 +145,7 @@ total_specific_humidity(ts::PhaseNonEquil) = ts.q.tot
 """
     cp_m([q::PhasePartition])
 
+
 The isobaric specific heat capacity of moist
 air where, optionally,
  - `q` [`PhasePartition`](@ref). Without this argument, the results are for dry air.
@@ -181,7 +181,7 @@ The isochoric specific heat capacity of moist
 air given a thermodynamic state `ts`.
 """
 cv_m(ts::ThermodynamicState) = cv_m(PhasePartition(ts))
-cv_m(ts::PhaseDry{FT}) where {FT<:Real} = FT(cv_d)
+cv_m(ts::PhaseDry{FT}) where {FT<:Real} = FT(cv_d,MT())
 
 
 """
@@ -228,7 +228,7 @@ and, optionally,
  - `q` [`PhasePartition`](@ref). Without this argument, the results are for dry air.
 """
 function air_temperature(e_int::U(FT,:gravpot), q::PhasePartition{FT}=q_pt_0(FT)) where {FT<:Real}
-  FT(T_0) +
+  FT(T_0, MT()) +
     (e_int - (q.tot - q.liq) * FT(e_int_v0, MT()) + q.ice * (FT(e_int_v0, MT()) + FT(e_int_i0, MT()))) /
     cv_m(q)
 end
@@ -420,7 +420,7 @@ isobaric specific heat capacities of the two phases, given
 """
 latent_heat_generic(T::U(FT,:temperature), LH_0::U(FT,:latent),
                             Δcp::U(FT,:shc)) where {FT<:Real} =
-  FT(LH_0, MT()) + FT(Δcp, MT()) * (T - FT(T_0, MT()))
+  LH_0 + Δcp * (T - FT(T_0, MT()))
 
 
 """
@@ -697,7 +697,8 @@ using Newtons method with analytic gradients.
 
 See also [`saturation_adjustment`](@ref).
 """
-function saturation_adjustment_NewtonsMethod(e_int::U(FT,:energypv), ρ::U(FT,:density), q_tot::FT, tol::FT, maxiter::Int) where {FT<:Real}
+function saturation_adjustment(e_int::U(FT,:energypv), ρ::U(FT,:density), q_tot::FT, tol::FT, maxiter::Int) where {FT<:Real}
+  bl = MT()
   T_1 = max(FT(T_min,bl), air_temperature(e_int, PhasePartition(q_tot))) # Assume all vapor
   q_v_sat = q_vap_saturation(T_1, ρ)
   unsaturated = q_tot <= q_v_sat
@@ -758,8 +759,8 @@ by finding the root of
 
 See also [`saturation_adjustment_q_tot_θ_liq_ice`](@ref).
 """
-function saturation_adjustment(e_int::U(FT,:gravpot), ρ::U(FT,:density), q_tot::FT, tol::FT, maxiter::Int) where {FT<:Real}
-  T_1 = max(FT(T_min), air_temperature(e_int, PhasePartition(q_tot))) # Assume all vapor
+function saturation_adjustment_SecantMethod(e_int::U(FT,:gravpot), ρ::U(FT,:density), q_tot::FT, tol::FT, maxiter::Int) where {FT<:Real}
+  T_1 = max(FT(T_min, MT()), air_temperature(e_int, PhasePartition(q_tot))) # Assume all vapor
   q_v_sat = q_vap_saturation(T_1, ρ)
   unsaturated = q_tot <= q_v_sat
   if unsaturated && T_1 > FT(T_min, MT())

@@ -32,6 +32,7 @@ using CLIMA.Atmos
 import CLIMA.Atmos: MoistureModel, temperature, pressure, soundspeed, total_specific_enthalpy
 
 unit_annotations(::AtmosModel) = true
+unit_annotations(::MoistThermodynamics.MT) = true
 
 """
     MMSDryModel

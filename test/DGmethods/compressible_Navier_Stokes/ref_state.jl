@@ -35,6 +35,7 @@ init_state!(state, aux, coords, t) = nothing
 using CLIMA.Atmos: vars_aux
 
 unit_annotations(::AtmosModel) = true
+unit_annotations(::MoistThermodynamics.MT) = true
 
 function run1(mpicomm, ArrayType, dim, topl, N, timeend, FT, dt)
 

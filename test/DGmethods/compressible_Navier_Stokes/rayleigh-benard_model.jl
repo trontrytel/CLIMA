@@ -50,6 +50,7 @@ const T_top     = T_bot + T_lapse*zmax
 const C_smag    = 0.18
 
 unit_annotations(::AtmosModel) = true
+unit_annotations(::MoistThermodynamics.MT) = true
 
 # ------------- Initial condition function ----------- #
 function initialise_rayleigh_benard!(state::Vars, aux::Vars, coord, t)

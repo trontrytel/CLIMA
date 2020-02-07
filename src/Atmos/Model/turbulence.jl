@@ -92,10 +92,6 @@ $(DocStringExtensions.FIELDS)
   ρν::units(FT,:dynvisc)
 end
 
-function ConstantViscosityWithDivergence(ρν::units(FT,:dynvisc)) where {FT}
-  ConstantViscosityWithDivergence{FT}(ρν)
-end
-
 vars_gradient(::ConstantViscosityWithDivergence,FT) = @vars()
 vars_diffusive(::ConstantViscosityWithDivergence, FT) =
   @vars(S::SHermitianCompact{3,units(FT,:frequency),6})
