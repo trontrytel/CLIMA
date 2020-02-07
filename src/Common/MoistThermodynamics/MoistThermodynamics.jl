@@ -708,7 +708,7 @@ function saturation_adjustment(e_int::U(FT,:gravpot), ρ::U(FT,:density), q_tot:
     sol = find_zero(
       T -> internal_energy_sat(T, ρ, q_tot) - e_int,
       T_ -> ∂e_int_∂T(T_, e_int, ρ, q_tot),
-      T_1,
+      value(T_1),
       NewtonsMethod(), CompactSolution(), tol, maxiter)
     if !sol.converged
       error("saturation_adjustment did not converge")
