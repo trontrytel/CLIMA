@@ -139,14 +139,15 @@ function config_dycoms(FT, N, resolution, xmax, ymax, zmax)
               rayleigh_sponge,
               geostrophic_forcing)
 
-    model = AtmosModel{FT}(;ref_state=ref_state,
-                           turbulence=SmagorinskyLilly{FT}(C_smag),
-                             moisture=EquilMoist(5),
-                            radiation=radiation,
-                           subsidence=ConstantSubsidence{FT}(D_subsidence),
-                               source=source,
-                    boundarycondition=bc,
-                           init_state=ics)
+    model = AtmosModel{FT}(AtmosLESConfiguration;
+                           ref_state=ref_state,
+                          turbulence=SmagorinskyLilly{FT}(C_smag),
+                            moisture=EquilMoist(5),
+                           radiation=radiation,
+                          subsidence=ConstantSubsidence{FT}(D_subsidence),
+                              source=source,
+                   boundarycondition=bc,
+                          init_state=ics)
 
     config = CLIMA.LES_Configuration("DYCOMS", N, resolution, xmax, ymax, zmax,
                                      init_dycoms!,

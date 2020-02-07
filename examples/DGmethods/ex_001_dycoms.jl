@@ -137,14 +137,14 @@ function run(mpicomm, ArrayType, dim, topl,
             GeostrophicForcing{FT}(7.62e-5, 7, -5.5))
 
   # Model definition
-  model = AtmosModel{FT}(;orientation=FlatOrientation(),
-                            ref_state=NoReferenceState(),
-                           turbulence=SmagorinskyLilly{FT}(C_smag),
-                             moisture=EquilMoist(),
-                            radiation=DYCOMSRadiation{FT}(κ, α_z, z_i, ρ_i, D_subsidence, F_0, F_1),
-                               source=source,
-                    boundarycondition=DYCOMS_BC{FT}(C_drag, LHF, SHF),
-                           init_state=Initialise_DYCOMS!)
+  model = AtmosModel{FT}(AtmosLESConfiguration;
+                           ref_state=NoReferenceState(),
+                          turbulence=SmagorinskyLilly{FT}(C_smag),
+                            moisture=EquilMoist(5),
+                           radiation=DYCOMSRadiation{FT}(κ, α_z, z_i, ρ_i, D_subsidence, F_0, F_1),
+                              source=source,
+                   boundarycondition=DYCOMS_BC{FT}(C_drag, LHF, SHF),
+                          init_state=Initialise_DYCOMS!)
   # Balancelaw description
   dg = DGModel(model,
                grid,

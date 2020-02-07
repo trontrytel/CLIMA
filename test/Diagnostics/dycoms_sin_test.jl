@@ -157,12 +157,13 @@ let
             GeostrophicForcing{FT}(f_coriolis, u_geostrophic, v_geostrophic))
 
   # Model definition
-  model = AtmosModel{FT}(;ref_state=NoReferenceState(),
-                         turbulence=SmagorinskyLilly{FT}(C_smag),
-                          radiation=DYCOMSRadiation{FT}(κ, α_z, z_i, ρ_i, D_subsidence, F_0, F_1),
-                             source=source,
-                  boundarycondition=DYCOMS_BC{FT}(C_drag, LHF, SHF),
-                         init_state=Initialise_DYCOMS!)
+  model = AtmosModel{FT}(AtmosLESConfiguration;
+                         ref_state=NoReferenceState(),
+                        turbulence=SmagorinskyLilly{FT}(C_smag),
+                         radiation=DYCOMSRadiation{FT}(κ, α_z, z_i, ρ_i, D_subsidence, F_0, F_1),
+                            source=source,
+                 boundarycondition=DYCOMS_BC{FT}(C_drag, LHF, SHF),
+                        init_state=Initialise_DYCOMS!)
   # Balancelaw description
   dg = DGModel(model,
                grid,

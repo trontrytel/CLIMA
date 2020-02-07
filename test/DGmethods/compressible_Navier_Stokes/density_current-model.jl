@@ -105,11 +105,12 @@ function run(mpicomm, ArrayType,
                                            )
   # -------------- Define model ---------------------------------- #
   source = Gravity()
-  model = AtmosModel{FT}(;ref_state=NoReferenceState(),
-                         turbulence=AnisoMinDiss{FT}(1),
-                             source=source,
-                  boundarycondition=NoFluxBC(),
-                         init_state=Initialise_Density_Current!)
+  model = AtmosModel{FT}(AtmosLESConfiguration;
+                         ref_state=NoReferenceState(),
+                        turbulence=AnisoMinDiss{FT}(1),
+                            source=source,
+                 boundarycondition=NoFluxBC(),
+                        init_state=Initialise_Density_Current!)
   # -------------- Define dgbalancelaw --------------------------- #
   dg = DGModel(model,
                grid,

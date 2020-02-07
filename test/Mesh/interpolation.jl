@@ -71,7 +71,8 @@ function run_brick_interpolation_test()
                                             DeviceArray = ArrayType,
                                             polynomialorder = polynomialorder)
     source = (Gravity(),)
-    model = AtmosModel{FT}(;ref_state=NoReferenceState(),
+    model = AtmosModel{FT}(AtmosLESConfiguration;
+                           ref_state=NoReferenceState(),
                           turbulence=ConstantViscosityWithDivergence(FT(0)),
                               source=source,
                           init_state=Initialize_Brick_Interpolation_Test!)
@@ -186,7 +187,8 @@ function run_cubed_sphere_interpolation_test()
                                             polynomialorder = polynomialorder,
                                             meshwarp = CLIMA.Mesh.Topologies.cubedshellwarp)
 
-    model = AtmosModel{FT}(;orientation=SphericalOrientation(),
+    model = AtmosModel{FT}(AtmosLESConfiguration;
+                           orientation=SphericalOrientation(),
                              ref_state=NoReferenceState(),
                             turbulence=ConstantViscosityWithDivergence(FT(0)),
                               moisture=DryModel(),

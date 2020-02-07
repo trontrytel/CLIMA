@@ -18,7 +18,8 @@ using CLIMA.Atmos: AtmosModel,
                    NoOrientation,
                    NoReferenceState, ReferenceState,
                    DryModel, NoPrecipitation, NoRadiation, NoSubsidence, PeriodicBC,
-                   ConstantViscosityWithDivergence, vars_state
+                   ConstantViscosityWithDivergence, vars_state,
+                   AtmosLESConfiguration
 using CLIMA.VariableTemplates: @vars, Vars, flattenednames
 import CLIMA.Atmos: atmos_init_aux!, vars_aux
 
@@ -114,13 +115,14 @@ function run(mpicomm, ArrayType, polynomialorder, numelems, setup,
   end
 
 
-  model = AtmosModel{FT}(;orientation=NoOrientation(),
-                            ref_state=IsentropicVortexReferenceState{FT}(setup),
-                           turbulence=ConstantViscosityWithDivergence(FT(0)),
-                             moisture=DryModel(),
-                               source=nothing,
-                    boundarycondition=PeriodicBC(),
-                           init_state=initialcondition!)
+  model = AtmosModel{FT}(AtmosLESConfiguration;
+                         orientation=NoOrientation(),
+                           ref_state=IsentropicVortexReferenceState{FT}(setup),
+                          turbulence=ConstantViscosityWithDivergence(FT(0)),
+                            moisture=DryModel(),
+                              source=nothing,
+                   boundarycondition=PeriodicBC(),
+                          init_state=initialcondition!)
 
   linear_model = AtmosAcousticLinearModel(model)
   nonlinear_model = RemainderModel(model, (linear_model,))

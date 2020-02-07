@@ -213,7 +213,7 @@ function run(mpicomm,
             GeostrophicForcing{FT}(f_coriolis, u_geostrophic, v_geostrophic))
 
   # Model definition
-  model = AtmosModel{FT}(;orientation=FlatOrientation(),
+  model = AtmosModel{FT}(AtmosLESConfiguration;
                             ref_state=HydrostaticState(Temp,RelHum),
                            turbulence=SmagorinskyLilly{}(C_smag),
                              moisture=EquilMoist(5),

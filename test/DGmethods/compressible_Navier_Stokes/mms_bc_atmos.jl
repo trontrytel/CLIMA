@@ -100,7 +100,8 @@ function run(mpicomm, ArrayType, dim, topl, warpfun, N, timeend, FT, dt)
                                          )
 
   if dim == 2
-    model = AtmosModel{FT}(;orientation=NoOrientation(),
+    model = AtmosModel{FT}(AtmosLESConfiguration;
+                           orientation=NoOrientation(),
                               ref_state=NoReferenceState(),
                              turbulence=ConstantViscosityWithDivergence(FT(μ_exact)),
                                moisture=MMSDryModel(),
@@ -108,7 +109,8 @@ function run(mpicomm, ArrayType, dim, topl, warpfun, N, timeend, FT, dt)
                       boundarycondition=InitStateBC(),
                              init_state=mms2_init_state!)
   else
-    model = AtmosModel{FT}(;orientation=NoOrientation(),
+    model = AtmosModel{FT}(AtmosLESConfiguration;
+                            orientation=NoOrientation(),
                               ref_state=NoReferenceState(),
                              turbulence=ConstantViscosityWithDivergence(FT(μ_exact)),
                                moisture=MMSDryModel(),
