@@ -7,7 +7,6 @@ using CLIMA.Mesh.Geometry
 using CLIMA.DGmethods
 using CLIMA.DGmethods.NumericalFluxes
 using CLIMA.MPIStateArrays
-using CLIMA.LowStorageRungeKuttaMethod
 using CLIMA.SubgridScaleParameters
 using CLIMA.ODESolvers
 using CLIMA.GenericCallbacks

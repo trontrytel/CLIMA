@@ -7,7 +7,6 @@ using CLIMA.Mesh.Geometry
 using CLIMA.DGmethods
 using CLIMA.DGmethods.NumericalFluxes
 using CLIMA.MPIStateArrays
-using CLIMA.AdditiveRungeKuttaMethod
 using CLIMA.LinearSolvers
 using CLIMA.GeneralizedMinimalResidualSolver
 using CLIMA.SubgridScaleParameters

@@ -6,7 +6,7 @@ using Test
 using CLIMA
 using CLIMA.Atmos
 using CLIMA.GenericCallbacks
-using CLIMA.LowStorageRungeKuttaMethod
+using CLIMA.ODESolvers
 using CLIMA.Mesh.Filters
 using CLIMA.MoistThermodynamics
 using CLIMA.PlanetParameters
