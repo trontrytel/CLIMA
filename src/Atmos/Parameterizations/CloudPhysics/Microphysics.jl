@@ -13,6 +13,7 @@ module Microphysics
 using CLIMA.MoistThermodynamics
 using CLIMA.PlanetParameters
 using ..MicrophysicsParameters
+using ..Parameters
 
 # rain fall speed
 export c_velo
@@ -68,11 +69,17 @@ where:
 Returns the mass weighted average rain terminal velocity assuming
 Marshall Palmer 1948 distribution of rain drops.
 """
-function terminal_velocity(q_rai::FT, ρ::FT) where {FT<:Real}
+function terminal_velocity(q_rai::FT, ρ::FT) where {FT <: Real}
 
     return c_velo(ρ) * lambda(q_rai, ρ)^(-p_velo)
            * gamma(p_velo + p_mass + FT(1)) / gamma(p_mass + FT(1))
 
+    # gamma(9/2)
+    gamma_9_2 = FT(11.631728396567448)
+
+    lambda::FT = (FT(8) * π * ρ_cloud_liq * MP_n_0 / ρ / q_rai)^FT(1 / 4)
+
+    return gamma_9_2 * v_c / FT(6) * sqrt(grav / lambda)
 end
 
 """
@@ -118,9 +125,9 @@ where:
 Returns the q_rai tendency due to collisions between cloud droplets
 (autoconversion) parametrized following Kessler 1995.
 """
-function conv_q_liq_to_q_rai_acnv(q_liq::FT) where {FT<:Real}
+function conv_q_liq_to_q_rai_acnv(q_liq::FT) where {FT <: Real}
 
-  return max(FT(0), q_liq - q_liq_threshold) / τ_acnv
+    return max(FT(0), q_liq - q_liq_threshold) / τ_acnv
 end
 
 
