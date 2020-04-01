@@ -10,17 +10,19 @@ Microphysics parameterization based on the ideas of Kessler_1995:
 """
 module Microphysics
 
+using SpecialFunctions
+
 using CLIMA.MoistThermodynamics
 using CLIMA.PlanetParameters: ρ_cloud_liq, R_v, grav
 using ..MicrophysicsParameters
 using ..Parameters
 
+# rain size distribution parameter
+export lambda
+
 # rain fall speed
 export c_velo
 export terminal_velocity
-
-# rain size distribution parameter
-export lambda
 
 # rates of conversion between microphysics categories
 export conv_q_vap_to_q_liq
@@ -55,8 +57,7 @@ rain drops.
 """
 function lambda(q_rai::FT, ρ::FT) where {FT<:Real}
 
-    return
-      (c_mass * MP_n_0 * gamma(p_mass + FT(1)) / ρ / q_rai)^FT(1/(p_mass + 1))
+    return (c_mass * MP_n_0 * gamma(p_mass + FT(1)) / ρ / q_rai)^FT(1/(p_mass + 1))
 end
 
 """
@@ -71,15 +72,13 @@ Marshall Palmer 1948 distribution of rain drops.
 """
 function terminal_velocity(q_rai::FT, ρ::FT) where {FT <: Real}
 
-    return c_velo(ρ) * lambda(q_rai, ρ)^(-p_velo)
-           * gamma(p_velo + p_mass + FT(1)) / gamma(p_mass + FT(1))
+    rain_w = FT(0)
 
-    # gamma(9/2)
-    gamma_9_2 = FT(11.631728396567448)
-
-    lambda::FT = (FT(8) * π * ρ_cloud_liq * MP_n_0 / ρ / q_rai)^FT(1 / 4)
-
-    return gamma_9_2 * v_c / FT(6) * sqrt(grav / lambda)
+    if q_rai > FT(0)
+        rain_w = c_velo(ρ) * lambda(q_rai, ρ)^(-p_velo) *
+                 gamma(p_velo + p_mass + FT(1)) / gamma(p_mass + FT(1))
+    end
+    return rain_w
 end
 
 """
@@ -144,9 +143,14 @@ and rain drops (accretion) parametrized following Kessler 1995.
 """
 function conv_q_liq_to_q_rai_accr(q_liq::FT, q_rai::FT, ρ::FT) where {FT<:Real}
 
-    return MP_n_0 * c_area * c_velo * q_liq * E_col
-           * gamma(p_area + p_velo + FT(1))
-           * lambda(q_rai, ρ)^(-p_area - p_velo -FT(1))
+    accr_rate = FT(0)
+
+    if (q_rai > FT(0) && q_liq > FT(0))
+        accr_rate = MP_n_0 * c_area * c_velo(ρ) * q_liq * E_col *
+                    gamma(p_area + p_velo + FT(1)) *
+                    lambda(q_rai, ρ)^(-p_area - p_velo -FT(1))
+    end
+    return accr_rate
 end
 
 """
@@ -162,29 +166,33 @@ where:
 Returns the q_rai tendency due to rain evaporation. Parameterized following
 Smolarkiewicz and Grabowski 1996.
 """
-function conv_q_rai_to_q_vap(qr::FT, q::PhasePartition{FT},
+function conv_q_rai_to_q_vap(q_rai::FT, q::PhasePartition{FT},
                              T::FT, p::FT, ρ::FT) where {FT<:Real}
 
-    qv_sat = q_vap_saturation(T, ρ, q)
-    q_v = q.tot - q.liq - q.ice
-    S = q_v/qv_sat - FT(1)
+    evap_rate = FT(0)
 
-    L = latent_heat_vapor(T)
-    p_vs = saturation_vapor_pressure(T, Liquid())
-    G::FT = FT(1) / (
-              L / K_therm / T * (L / R_v / T - FT(1))
-              + R_v * T / D_vapor / p_vs
-            )
+    if q_rai > FT(0)
 
-    return c_mass * p_mass * S * G * MP_n_0 / ρ / ρ_cloud_liq
-           * (
-               a_vent * lambda(q_rai, ρ)^(-p_mass + FT(1))
-               * gamma(p_mass - FT(1))
-               +
-               b_vent * N_Sc^FT(1/3) * (FT(2) * c_velo / ν_air
-               * lambda(q_rai, ρ)^FT(-2*p_mass - p_velo + 1))^FT(1/2)
-               * gamma(FT(2*p_mass + p_velo - 1)/FT(2))
-             )
+        qv_sat = q_vap_saturation(T, ρ, q)
+        q_v = q.tot - q.liq - q.ice
+        S = q_v/qv_sat - FT(1)
+
+        L = latent_heat_vapor(T)
+        p_vs = saturation_vapor_pressure(T, Liquid())
+        G::FT = FT(1) / (
+                  L / K_therm / T * (L / R_v / T - FT(1))
+                  + R_v * T / D_vapor / p_vs
+                )
+
+        evap_rate = c_mass * p_mass * S * G * MP_n_0 / ρ / ρ_cloud_liq *
+                    (a_vent * lambda(q_rai, ρ)^(-p_mass + FT(1)) *
+                     gamma(p_mass - FT(1))
+                     +
+                     b_vent * N_Sc^FT(1/3) * (FT(2) * c_velo(ρ) / ν_air *
+                     lambda(q_rai, ρ)^FT(-2*p_mass - p_velo + 1))^FT(1/2) *
+                     gamma(FT(2*p_mass + p_velo - 1)/FT(2))
+                    )
+    end
+    return evap_rate
 end
-
 end #module Microphysics.jl
