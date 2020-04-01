@@ -14,7 +14,7 @@ using CLIMA.GenericCallbacks
 using CLIMA.Atmos
 using CLIMA.VariableTemplates
 using CLIMA.MoistThermodynamics
-using CLIMA.PlanetParameters
+using CLIMA.PlanetParameters: R_d, cp_d, cv_d, grav, MSLP
 using CLIMA.SubgridScaleParameters
 using LinearAlgebra
 using StaticArrays
@@ -26,6 +26,7 @@ using CLIMA.Atmos: vars_state, vars_aux
 using CLIMA.Parameters
 const clima_dir = dirname(pathof(CLIMA))
 include(joinpath(clima_dir, "..", "Parameters", "Parameters.jl"))
+param_set = ParameterSet()
 
 if !@isdefined integration_testing
     const integration_testing = parse(
@@ -136,7 +137,7 @@ function run(
         turbulence = AnisoMinDiss{FT}(1),
         source = source,
         init_state = Initialise_Density_Current!,
-        param_set = ParameterSet{FT}(),
+        param_set = param_set,
     )
     # -------------- Define dgbalancelaw --------------------------- #
     dg = DGModel(

@@ -7,9 +7,12 @@ cpu = [
   { file = "test/DGmethods/advection_diffusion/pseudo1D_advection_diffusion_1dimex.jl", slurmargs = ["--ntasks=3"], args = [] },
   { file = "test/DGmethods/advection_diffusion/pseudo1D_heat_eqn.jl", slurmargs = ["--ntasks=3"], args = [] },
   { file = "test/DGmethods/advection_diffusion/periodic_3D_hyperdiffusion.jl", slurmargs = ["--ntasks=3"], args = [] },
+  { file = "test/ODESolvers/ode_tests_convergence.jl", slurmargs = ["--ntasks=1"], args = [] },
 ]
 
 cpu_gpu = [
+  { file = "test/Arrays/varsindex.jl", slurmargs = ["--ntasks=1"], args = [] },
+  { file = "test/DGmethods/vars_test.jl", slurmargs = ["--ntasks=1"], args = [] },
   { file = "test/DGmethods/Euler/isentropicvortex.jl", slurmargs = ["--ntasks=3"], args = [] },
   { file = "test/DGmethods/Euler/isentropicvortex_imex.jl", slurmargs = ["--ntasks=3"], args = [] },
   { file = "test/DGmethods/Euler/isentropicvortex_multirate.jl", slurmargs = ["--ntasks=3"], args = [] },
@@ -30,6 +33,7 @@ cpu_gpu = [
   { file = "test/DGmethods_old/sphere/advection_sphere_lsrk.jl", slurmargs = ["--ntasks=2"], args = [] },
   { file = "test/DGmethods_old/sphere/advection_sphere_ssp33.jl", slurmargs = ["--ntasks=2"], args = [] },
   { file = "test/DGmethods_old/sphere/advection_sphere_ssp34.jl", slurmargs = ["--ntasks=2"], args = [] },
+  { file = "test/Driver/gcm_driver_test.jl", slurmargs = ["--ntasks=1"], args = [] },
   { file = "test/LinearSolvers/poisson.jl", slurmargs = ["--ntasks=2"], args = [] },
   { file = "test/LinearSolvers/columnwiselu.jl", slurmargs = ["--ntasks=1"], args = []},
   { file = "test/LinearSolvers/bandedsystem.jl", slurmargs = ["--ntasks=3", "--time=02:00:00"], args = [] },
@@ -49,7 +53,7 @@ gpu = [
   { file = "test/DGmethods/advection_diffusion/pseudo1D_heat_eqn.jl", slurmargs = ["--ntasks=3"], args = ["--integration-testing"] },
   { file = "test/DGmethods/advection_diffusion/periodic_3D_hyperdiffusion.jl", slurmargs = ["--ntasks=3"], args = ["--integration-testing"] },
   { file = "examples/Atmos/dry_rayleigh_benard.jl", slurmargs = ["--ntasks=3", "--time=01:30:00"], args = [] },
-  { file = "experiments/AtmosGCM/heldsuarez.jl", slurmargs = ["--ntasks=3"], args = [] },
+  { file = "experiments/AtmosGCM/heldsuarez.jl", slurmargs = ["--ntasks=3", "--time=01:30:00"], args = [] },
   { file = "experiments/AtmosLES/risingbubble.jl", slurmargs = ["--ntasks=3"], args = [] },
   { file = "experiments/AtmosLES/surfacebubble.jl", slurmargs = ["--ntasks=3", "--time=01:30:00"], args = [] },
   { file = "experiments/AtmosLES/dycoms.jl", slurmargs = ["--ntasks=3"], args = [] },
