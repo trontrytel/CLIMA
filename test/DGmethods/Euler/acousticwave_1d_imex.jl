@@ -11,7 +11,6 @@ using CLIMA.GeneralizedMinimalResidualSolver
 using CLIMA.ColumnwiseLUSolver: ManyColumnLU
 using CLIMA.VTK: writevtk, writepvtu
 using CLIMA.GenericCallbacks: EveryXWallTimeSeconds, EveryXSimulationSteps
-using CLIMA.PlanetParameters: planet_radius, day
 using CLIMA.MoistThermodynamics:
     air_density,
     soundspeed_air,
@@ -37,10 +36,10 @@ using CLIMA.Atmos:
     gravitational_potential
 using CLIMA.VariableTemplates: flattenednames
 
-using CLIMA.Parameters
-const clima_dir = dirname(pathof(CLIMA))
-include(joinpath(clima_dir, "..", "Parameters", "Parameters.jl"))
-param_set = ParameterSet()
+using CLIMAParameters
+using CLIMAParameters.Planet: planet_radius
+struct EarthParameterSet <: AbstractEarthParameterSet end
+const param_set = EarthParameterSet()
 
 using MPI, Logging, StaticArrays, LinearAlgebra, Printf, Dates, Test
 
@@ -51,16 +50,6 @@ function main()
     ArrayType = CLIMA.array_type()
 
     mpicomm = MPI.COMM_WORLD
-    ll = uppercase(get(ENV, "JULIA_LOG_LEVEL", "INFO"))
-    loglevel = Dict(
-        "DEBUG" => Logging.Debug,
-        "WARN" => Logging.Warn,
-        "ERROR" => Logging.Error,
-        "INFO" => Logging.Info,
-    )[ll]
-
-    logger_stream = MPI.Comm_rank(mpicomm) == 0 ? stderr : devnull
-    global_logger(ConsoleLogger(logger_stream, loglevel))
 
     polynomialorder = 5
     numelem_horz = 10
@@ -102,9 +91,10 @@ function run(
 
     setup = AcousticWaveSetup{FT}()
 
+    _planet_radius::FT = planet_radius(param_set)
     vert_range = grid1d(
-        FT(planet_radius),
-        FT(planet_radius + setup.domain_height),
+        _planet_radius,
+        FT(_planet_radius + setup.domain_height),
         nelem = numelem_vert,
     )
     topology = StackedCubedSphereTopology(mpicomm, numelem_horz, vert_range)

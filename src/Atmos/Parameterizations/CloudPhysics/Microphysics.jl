@@ -94,7 +94,6 @@ constant timescale.
 """
 function conv_q_vap_to_q_liq(q_sat::PhasePartition{FT},
                              q::PhasePartition{FT}) where {FT<:Real}
-
     return (q_sat.liq - q.liq) / τ_cond_evap_liq
 end
 
@@ -111,7 +110,6 @@ constant timescale.
 """
 function conv_q_vap_to_q_ice(q_sat::PhasePartition{FT},
                              q::PhasePartition{FT}) where {FT<:Real}
-
     return (q_sat.ice - q.ice) / τ_cond_evap_ice
 end
 
@@ -168,7 +166,6 @@ Smolarkiewicz and Grabowski 1996.
 """
 function conv_q_rai_to_q_vap(q_rai::FT, q::PhasePartition{FT},
                              T::FT, p::FT, ρ::FT) where {FT<:Real}
-
     evap_rate = FT(0)
 
     if q_rai > FT(0)

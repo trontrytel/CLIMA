@@ -35,5 +35,4 @@ using CLIMA.PlanetParameters
 @exportparameter D_vapor 2.26e-5 "diffusivity of water vapor [m2/s]"
 @exportparameter ν_air 1.6e-5 "kinematic viscosity of air [m2/s]"
 @exportparameter N_Sc ν_air/D_vapor "Schmidt number [-]"
-
 end
