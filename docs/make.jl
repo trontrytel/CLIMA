@@ -5,13 +5,13 @@ using CLIMA, Documenter
 # TODO: Add generated examples back
 # include("generate.jl")
 
-GENERATED_BL_EXAMPLES = [
-    joinpath("examples", "DGmethods_old", "generated", f)
-    for
-    f in ("ex_001_periodic_advection.md", "ex_002_solid_body_rotation.md")
-]
-GENERATED_BL_EXAMPLES = filter!(x -> isfile(x), GENERATED_BL_EXAMPLES)
-
+#GENERATED_BL_EXAMPLES = [
+#    joinpath("examples", "DGmethods_old", "generated", f)
+#    for
+#    f in ("ex_001_periodic_advection.md", "ex_002_solid_body_rotation.md")
+#]
+#GENERATED_BL_EXAMPLES = filter!(x -> isfile(x), GENERATED_BL_EXAMPLES)
+#
 pages = Any[
     "Home" => "index.md",
     "Common" => Any["MoistThermodynamics" => "Common/MoistThermodynamics.md",],
@@ -21,26 +21,26 @@ pages = Any[
         "Atmos/EDMFEquations.md",
         "Microphysics" => "Atmos/Microphysics.md",
     ],
-    "ODESolvers" => "ODESolvers.md",
-    "LinearSolvers" => "LinearSolvers.md",
-    "Mesh" => "Mesh.md",
-    "Arrays" => "Arrays.md",
-    "DGmethods_old" => "DGmethods_old.md",
-    "InputOutput.md",
-    "Developer docs" => Any[
-        "CodingConventions.md",
-        "AcceptableUnicode.md",
-        "VariableList.md",
-    ],
+   # "ODESolvers" => "ODESolvers.md",
+   # "LinearSolvers" => "LinearSolvers.md",
+   # "Mesh" => "Mesh.md",
+   # "Arrays" => "Arrays.md",
+   # "DGmethods_old" => "DGmethods_old.md",
+   # "InputOutput.md",
+   # "Developer docs" => Any[
+   #     "CodingConventions.md",
+   #     "AcceptableUnicode.md",
+   #     "VariableList.md",
+   # ],
 ]
 
-if !isempty(GENERATED_BL_EXAMPLES)
-    push!(
-        pages,
-        "Balance Law Examples" =>
-            ["BalanceLawOverview.md", GENERATED_BL_EXAMPLES...],
-    )
-end
+#if !isempty(GENERATED_BL_EXAMPLES)
+#    push!(
+#        pages,
+#        "Balance Law Examples" =>
+#            ["BalanceLawOverview.md", GENERATED_BL_EXAMPLES...],
+#    )
+#end
 
 
 makedocs(
