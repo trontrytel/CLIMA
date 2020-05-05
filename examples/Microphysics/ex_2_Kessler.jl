@@ -114,27 +114,33 @@ function kinematic_model_nodal_update_aux!(
         FT(100)
     aux.RH = aux.q_vap / q_vap_saturation(aux.T, state.ρ, q) * FT(100)
 
-    aux.rain_w = terminal_velocity(aux.q_rai, state.ρ)
+    λ_rai = lambda(aux.q_rai, state.ρ, n0_rai, α_rai, β_rai)
+    aux.rain_w = terminal_velocity(aux.q_rai, λ_rai, β_rai, ζ_rai, η_rai)
 
     # uncomment below for more diagnostics
-    #q_eq = PhasePartition_equil(aux.T, state.ρ, aux.q_tot)
-    #aux.src_cloud_liq = conv_q_vap_to_q_liq(q_eq, q)
-    #aux.src_cloud_ice = conv_q_vap_to_q_ice(q_eq, q)
-    #aux.src_acnv = conv_q_liq_to_q_rai_acnv(aux.q_liq)
-    #aux.src_accr = conv_q_liq_to_q_rai_accr(aux.q_liq, aux.q_rai, state.ρ)
-    #aux.src_rain_evap = conv_q_rai_to_q_vap(aux.q_rai, q, aux.T, aux.p, state.ρ)
-    #aux.flag_cloud_liq = FT(0)
-    #aux.flag_cloud_ice = FT(0)
-    #aux.flag_rain = FT(0)
-    #if (aux.q_liq >= FT(0))
-    #    aux.flag_cloud_liq = FT(1)
-    #end
-    #if (aux.q_ice >= FT(0))
-    #    aux.flag_cloud_ice = FT(1)
-    #end
-    #if (aux.q_rai >= FT(0))
-    #    aux.flag_rain = FT(1)
-    #end
+    q_eq = PhasePartition_equil(aux.T, state.ρ, aux.q_tot)
+    S_liq = supersaturation(q, state.ρ, Liquid())
+    G_liq = G_func(aux.T, K_therm, R_v, D_vapor, Liquid())
+    aux.src_cloud_liq = state.ρ * conv_q_vap_to_q_liq_ice(q_eq, q, Liquid())
+    aux.src_cloud_ice = state.ρ * conv_q_vap_to_q_ice_ice(q_eq, q, Ice())
+    aux.src_acnv = conv_q_liq_to_q_rai_acnv(aux.q_liq)
+    aux.src_accr = accretion(aux.q_liq, aux.q_rai, E_cr, n0_rai, λ_rai, γ_fall,
+                         δ_fall, ζ_fall, η_fall)
+    aux.src_rain_evap = evaporation_sublimation(aux.q_rai, state.ρ, S_liq, G_liq,
+                         a_vent_rai, b_vent_rai, ν_air, D_vapor, n0_rai, λ_rai,
+                         ζ_rai, η_rai)
+    aux.flag_cloud_liq = FT(0)
+    aux.flag_cloud_ice = FT(0)
+    aux.flag_rain = FT(0)
+    if (aux.q_liq >= FT(0))
+        aux.flag_cloud_liq = FT(1)
+    end
+    if (aux.q_ice >= FT(0))
+        aux.flag_cloud_ice = FT(1)
+    end
+    if (aux.q_rai >= FT(0))
+        aux.flag_rain = FT(1)
+    end
 end
 
 function boundary_state!(
@@ -162,7 +168,11 @@ end
 )
     FT = eltype(state)
     u = state.ρu / state.ρ
-    rain_w = terminal_velocity(state.ρq_rai / state.ρ, state.ρ)
+
+    q_rai = state.ρq_rai/state.ρ
+    λ_rai = lambda(q_rai, state.ρ, n0_rai, α_rai, β_rai)
+    rain_w = terminal_velocity(q_rai, λ_rai, β_rai, ζ_rai, η_rai)
+
     nu = nM[1] * u[1] + nM[3] * max(u[3], rain_w, u[3] - rain_w)
 
     return abs(nu)
@@ -176,7 +186,10 @@ end
     t::Real,
 )
     FT = eltype(state)
-    rain_w = terminal_velocity(state.ρq_rai / state.ρ, state.ρ)
+
+    q_rai = state.ρq_rai/state.ρ
+    λ_rai = lambda(q_rai, state.ρ, n0_rai, α_rai, β_rai)
+    rain_w = terminal_velocity(q_rai, λ_rai, β_rai, ζ_rai, η_rai)
 
     # advect moisture ...
     flux.ρq_tot = SVector(
@@ -245,15 +258,22 @@ function source!(
     source.ρq_rai = FT(0)
     source.ρe = FT(0)
 
+    # compute the microphysics parameters
+    λ_rai = lambda(q_rai, state.ρ, n0_rai, α_rai, β_rai)
+    S_liq = supersaturation(q, state.ρ, Liquid())
+    G_liq = G_func(T, K_therm, R_v, D_vapor, Liquid())
+
     # cloud water and ice condensation/evaporation
-    source.ρq_liq += state.ρ * conv_q_vap_to_q_liq(q_eq, q)
-    source.ρq_ice += state.ρ * conv_q_vap_to_q_ice(q_eq, q)
+    source.ρq_liq += state.ρ * conv_q_vap_to_q_liq_ice(q_eq, q, Liquid())
+    source.ρq_ice += state.ρ * conv_q_vap_to_q_ice_ice(q_eq, q, Ice())
 
     # tendencies from rain
-    src_q_rai_acnv = conv_q_liq_to_q_rai_acnv(q_liq)
-    src_q_rai_accr = conv_q_liq_to_q_rai_accr(q_liq, q_rai, state.ρ)
-    src_q_rai_evap = conv_q_rai_to_q_vap(q_rai, q, T, aux.p, state.ρ)
-
+    src_q_rai_acnv = conv_q_liq_to_q_rai(q_liq)
+    src_q_rai_accr = accretion(q_liq, q_rai, E_cr, n0_rai, λ_rai, γ_fall,
+                         δ_fall, ζ_fall, η_fall)
+    src_q_rai_evap = evaporation_sublimation(q_rai, state.ρ, S_liq, G_liq,
+                         a_vent_rai, b_vent_rai, ν_air, D_vapor, n0_rai, λ_rai,
+                         ζ_rai, η_rai)
     src_q_rai_tot = src_q_rai_acnv + src_q_rai_accr + src_q_rai_evap
 
     source.ρq_liq -= state.ρ * (src_q_rai_acnv + src_q_rai_accr)

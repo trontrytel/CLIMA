@@ -1,4 +1,4 @@
-# Microphysics Module
+# Microphysics
 
 The `Microphysics.jl` module describes a 1-moment bulk parameterization of cloud microphysical processes.
 The module is based on the ideas of
@@ -90,14 +90,11 @@ where:
  - ``C_{drag}`` is the drag coefficient,
  - ``\rho`` is the density of air.\
 
----
-**TODO**
+!!! note
 
-It would be great to replace the above simple power laws with more accurate relationships.
-For example:
-[Khvorostyanov\_and\_Curry\_2002](https://journals.ametsoc.org/doi/pdf/10.1175/1520-0469%282002%29059%3C1872%3ATVODAC%3E2.0.CO%3B2)
-
----
+    It would be great to replace the above simple power laws with more accurate relationships.
+    For example:
+    [Khvorostyanov\_and\_Curry\_2002](https://journals.ametsoc.org/doi/pdf/10.1175/1520-0469%282002%29059%3C1872%3ATVODAC%3E2.0.CO%3B2)
 
 ## Assumed particle size distributions
 
@@ -151,14 +148,10 @@ The cloud-ice size distribution is only used when computing snow autoconversion 
 In the derivation of different accretion rates the cloud ice, similar to cloud water,
 is treated as continuous.
 
----
-**TODO**
+!!! note
+     - Do we want to keep the ``n_0`` for rain constant and ``n_0`` for snow empirical?
 
-- Do we want to keep the ``n_0`` for rain constant and ``n_0`` for snow empirical?
-
-- Do we want to test different size distributions?
-
----
+     - Do we want to test different size distributions?
 
 ## Parameterized processes
 
@@ -271,15 +264,12 @@ v_t = \zeta \lambda^{-\eta} \frac{\Gamma(\eta + \beta + 1)}{\Gamma(\beta + 1)}
 \end{equation}
 ```
 
----
-**TODO**
+!!! note
 
-Assuming a constant drag coefficient is an approximation and it should be size and flow dependent,
-see [drag_coefficient](https://www.grc.nasa.gov/www/K-12/airplane/dragsphere.html).
-In general we should implement these terminal velocity parameterizations:
-[Khvorostyanov\_and\_Curry\_2002](https://journals.ametsoc.org/doi/pdf/10.1175/1520-0469%282002%29059%3C1872%3ATVODAC%3E2.0.CO%3B2)
-
----
+    Assuming a constant drag coefficient is an approximation and it should be size and flow dependent,
+    see [drag_coefficient](https://www.grc.nasa.gov/www/K-12/airplane/dragsphere.html).
+    In general we should implement these terminal velocity parameterizations:
+    [Khvorostyanov\_and\_Curry\_2002](https://journals.ametsoc.org/doi/pdf/10.1175/1520-0469%282002%29059%3C1872%3ATVODAC%3E2.0.CO%3B2)
 
 ### Cloud water condensation/evaporation
 
@@ -307,14 +297,10 @@ where:
  - ``q_{ice}`` - ice specific humidity,
  - ``\tau_{sub\_resub}`` - relaxation timescale (parameter in `MicrophysicsParameters` module).
 
----
-**TODO**
-
-Both ``\tau_{cond\_evap}`` and ``\tau_{sub\_resub}`` are assumed constant here.
-It would be great to make the relaxation time a function of available condensation nuclei, turbulence intensity, etc.
-See works by [prof Raymond Shaw](https://www.mtu.edu/physics/department/faculty/shaw/) for hints.
-
----
+!!! note
+    Both ``\tau_{cond\_evap}`` and ``\tau_{sub\_resub}`` are assumed constant here.
+    It would be great to make the relaxation time a function of available condensation nuclei, turbulence intensity, etc.
+    See works by [prof Raymond Shaw](https://www.mtu.edu/physics/department/faculty/shaw/) for hints.
 
 ### Rain autoconversion
 
@@ -332,15 +318,11 @@ where:
  - ``\tau_{acnv}`` - timescale (parameter in `MicrophysicsParameters` module),
  - ``q_{liq\_threshold}`` - autoconversion (parameter in `MicrophysicsParameters` module).
 
----
-**TODO**
-
-This is the simplest possible autoconversion parameterization.
-It would be great to implement others and test the impact on precipitation.
-See for example [Wood\_2005](https://journals.ametsoc.org/doi/full/10.1175/JAS3530.1)
-Table 1 for other simple choices.
-
----
+!!! note
+    This is the simplest possible autoconversion parameterization.
+    It would be great to implement others and test the impact on precipitation.
+    See for example [Wood\_2005](https://journals.ametsoc.org/doi/full/10.1175/JAS3530.1)
+    Table 1 for other simple choices.
 
 ### Snow autoconversion
 
@@ -396,17 +378,13 @@ Finally the snow autoconversion rate is computed as
 \end{equation}
 ```
 
----
-**TODO**
+!!! note
+    We should include ventialtion effects.
 
-We should include ventialtion effects.
-
-For non-spherical particles the mass rate of growth
-should be multiplied by a function depending on the particle aspect ratio.
-For functions proposed for different crystal habitats see
-[Harrington_1995](https://journals.ametsoc.org/doi/pdf/10.1175/1520-0469%281995%29052%3C4344%3APOICCP%3E2.0.CO%3B2) Appentix B.
-
----
+    For non-spherical particles the mass rate of growth
+    should be multiplied by a function depending on the particle aspect ratio.
+    For functions proposed for different crystal habitats see
+    [Harrington_1995](https://journals.ametsoc.org/doi/pdf/10.1175/1520-0469%281995%29052%3C4344%3APOICCP%3E2.0.CO%3B2) Appentix B.
 
 ### Accretion
 
@@ -517,19 +495,16 @@ The eq.(\ref{eq:accr_sr1}) can then be integrated as:
     \right)
 \end{align}
 ```
----
-**TODO**
 
-Both of the assumptions needed to integrate the snow-rain accretion rate could be revisited:
+!!! note
+    Both of the assumptions needed to integrate the snow-rain accretion rate could be revisited:
 
-The discussion on page 88 in
-[Ikawa\_and\_Saito\_1991](https://www.mri-jma.go.jp/Publish/Technical/DATA/VOL_28/28_005.pdf)
-suggests an alternative approximation of the velocity difference.
+    The discussion on page 88 in
+    [Ikawa\_and\_Saito\_1991](https://www.mri-jma.go.jp/Publish/Technical/DATA/VOL_28/28_005.pdf)
+    suggests an alternative approximation of the velocity difference.
 
-The ``(r_i + r_j)^2`` assumption for the crossection is inconsistent with the
-snow crossection used when modelling collisions with cloud water and cloud ice.
-
----
+    The ``(r_i + r_j)^2`` assumption for the crossection is inconsistent with the
+    snow crossection used when modelling collisions with cloud water and cloud ice.
 
 
 ### Rain evaporation and snow sublimation
@@ -579,12 +554,8 @@ The final integral is:
 \end{align}
 ```
 
----
-**TODO**
-
-We should take into account the non-spherical snow shape. - Modify the Reynolds number and growth equation.
-
----
+!!! note
+    We should take into account the non-spherical snow shape. - Modify the Reynolds number and growth equation.
 
 ### Snow melt
 
@@ -620,109 +591,6 @@ where:
 \end{equation}
 ```
 
-## Examples (TODO)
-
-```@example rain_terminal_velocity
-using CLIMA.Microphysics
-using Plots
-
-# eq. 5d in Smolarkiewicz and Grabowski 1996
-# https://doi.org/10.1175/1520-0493(1996)124<0487:TTLSLM>2.0.CO;2
-function terminal_velocity_empirical(q_rai::DT, q_tot::DT, ρ::DT, ρ_air_ground::DT) where {DT<:Real}
-    rr  = q_rai / (DT(1) - q_tot)
-    vel = DT(14.34) * ρ_air_ground^DT(0.5) * ρ^-DT(0.3654) * rr^DT(0.1346)
-    return vel
-end
-
-q_rain_range = range(1e-8, stop=5e-3, length=100)
-ρ_air, q_tot, ρ_air_ground = 1.2, 20 * 1e-3, 1.22
-
-plot(q_rain_range * 1e3,  [terminal_velocity(q_rai, ρ_air) for q_rai in q_rain_range], xlabel="q_rain [g/kg]", ylabel="velocity [m/s]", title="Average terminal velocity of rain", label="CLIMA")
-plot!(q_rain_range * 1e3, [terminal_velocity_empirical(q_rai, q_tot, ρ_air, ρ_air_ground) for q_rai in q_rain_range], label="Empirical")
-savefig("rain_terminal_velocity.svg") # hide
-nothing # hide
-```
-![](rain_terminal_velocity.svg)
-
-
-```@example accretion
-using CLIMA.Microphysics
-using Plots
-
-# eq. 5b in Smolarkiewicz and Grabowski 1996
-# https://doi.org/10.1175/1520-0493(1996)124<0487:TTLSLM>2.0.CO;2
-function accretion_empirical(q_rai::DT, q_liq::DT, q_tot::DT) where {DT<:Real}
-    rr  = q_rai / (DT(1) - q_tot)
-    rl  = q_liq / (DT(1) - q_tot)
-    return DT(2.2) * rl * rr^DT(7/8)
-end
-
-# some example values
-q_rain_range = range(1e-8, stop=5e-3, length=100)
-ρ_air, q_liq, q_tot = 1.2, 5e-4, 20e-3
-
-plot(q_rain_range * 1e3,  [conv_q_liq_to_q_rai_accr(q_liq, q_rai, ρ_air) for q_rai in q_rain_range], xlabel="q_rain [g/kg]", ylabel="accretion rate [1/s]", title="Accretion", label="CLIMA")
-plot!(q_rain_range * 1e3, [accretion_empirical(q_rai, q_liq, q_tot) for q_rai in q_rain_range], label="empirical")
-savefig("accretion_rate.svg") # hide
-nothing # hide
-```
-![](accretion_rate.svg)
-
-
-
-```@example rain_evaporation
-using CLIMA.Microphysics
-using CLIMA.MoistThermodynamics
-
-using CLIMAParameters
-using CLIMAParameters.Planet: R_d, planet_radius, grav, MSLP
-struct EarthParameterSet <: AbstractEarthParameterSet end
-const param_set = EarthParameterSet()
-
-using Plots
-
-# eq. 5c in Smolarkiewicz and Grabowski 1996
-# https://doi.org/10.1175/1520-0493(1996)124<0487:TTLSLM>2.0.CO;2
-function rain_evap_empirical(q_rai::DT, q::PhasePartition, T::DT, p::DT, ρ::DT) where {DT<:Real}
-
-    q_sat  = q_vap_saturation(param_set, T, ρ, q)
-    q_vap  = q.tot - q.liq
-    rr     = q_rai / (DT(1) - q.tot)
-    rv_sat = q_sat / (DT(1) - q.tot)
-    S      = q_vap/q_sat - DT(1)
-
-    ag, bg = 5.4 * 1e2, 2.55 * 1e5
-    G = DT(1) / (ag + bg / p / rv_sat) / ρ
-
-    av, bv = 1.6, 124.9
-    F = av * (ρ/DT(1e3))^DT(0.525)  * rr^DT(0.525) + bv * (ρ/DT(1e3))^DT(0.7296) * rr^DT(0.7296)
-
-    return DT(1) / (DT(1) - q.tot) * S * F * G
-end
-
-# example values
-T, p = 273.15 + 15, 90000.
-ϵ = 1. / molmass_ratio
-p_sat = saturation_vapor_pressure(param_set, T, Liquid())
-q_sat = ϵ * p_sat / (p + p_sat * (ϵ - 1.))
-q_rain_range = range(1e-8, stop=5e-3, length=100)
-q_tot = 15e-3
-q_vap = 0.15 * q_sat
-q_ice = 0.
-q_liq = q_tot - q_vap - q_ice
-q = PhasePartition(q_tot, q_liq, q_ice)
-R = gas_constant_air(param_set, q)
-ρ = p / R / T
-
-plot(q_rain_range * 1e3,  [conv_q_rai_to_q_vap(q_rai, q, T, p, ρ) for q_rai in q_rain_range], xlabel="q_rain [g/kg]", ylabel="rain evaporation rate [1/s]", title="Rain evaporation", label="CLIMA")
-plot!(q_rain_range * 1e3, [rain_evap_empirical(q_rai, q, T, p, ρ) for q_rai in q_rain_range], label="empirical")
-savefig("rain_evaporation_rate.svg") # hide
-nothing # hide
-```
-![](rain_evaporation_rate.svg)
-
-
-
 ```@meta
 CurrentModule = CLIMA.Microphysics
 ```
@@ -730,9 +598,18 @@ CurrentModule = CLIMA.Microphysics
 ## User interface
 
 ```@docs
+ζ_rai
+n0_sno
+lambda
+supersaturation
+G_func
 terminal_velocity
-conv_q_vap_to_q_liq
-conv_q_liq_to_q_rai_acnv
-conv_q_liq_to_q_rai_accr
-conv_q_rai_to_q_vap
+conv_q_vap_to_q_liq_ice
+conv_q_liq_to_q_rai
+conv_q_ice_to_q_sno
+accretion
+accretion_rain_sink
+accretion_snow_rain
+evaporation_sublimation
+snow_melt
 ```

@@ -20,18 +20,18 @@ using CLIMA.PlanetParameters
 # n(r) = MP_n_0 * exp (-lambda r)
 
 @exportparameter α_rai 4/3. * π * ρ_cloud_liq "coefficient in mass(radius)"
-@exportparameter β_rai 3 "exponent in mass(radius)"
-@exportparameter γ_rai π "coefficient in area(radius) relation"
-@exportparameter δ_rai 2 "exponent in area(radius) relation"
+@exportparameter β_rai 3. "exponent in mass(radius)"
+@exportparameter γ_rai 1. * π "coefficient in area(radius) relation"
+@exportparameter δ_rai 2. "exponent in area(radius) relation"
 @exportparameter η_rai 0.5 "exponent in velocity(radius)"
 
 @exportparameter α_ice 4/3. * π * ρ_cloud_ice "coefficient in mass(radius)"
-@exportparameter β_ice 3 "exponent in mass(radius)"
+@exportparameter β_ice 3. "exponent in mass(radius)"
 
 @exportparameter α_sno 1e-1 "coefficient in mass(radius)"
-@exportparameter β_sno 2 "exponent in mass(radius)"
+@exportparameter β_sno 2. "exponent in mass(radius)"
 @exportparameter γ_sno 0.3 * π "coefficient in area(radius) relation"
-@exportparameter δ_sno 2 "exponent in area(radius) relation"
+@exportparameter δ_sno 2. "exponent in area(radius) relation"
 @exportparameter ζ_sno 2^(9/4) "coefficient in velocity(radius)"
 @exportparameter η_sno 0.25 "exponent in velocity(radius)"
 
@@ -42,8 +42,8 @@ using CLIMA.PlanetParameters
 
 @exportparameter C_drag 0.55 "drag coefficient for rain drops [-]"
 
-@exportparameter τ_cond_evap 10 "condensation/evaporation timescale [s]"
-@exportparameter τ_sub_resub 10 "sublimation/resublimation timescale [s]"
+@exportparameter τ_cond_evap 10. "condensation/evaporation timescale [s]"
+@exportparameter τ_sub_resub 10. "sublimation/resublimation timescale [s]"
 
 @exportparameter τ_acnv 1e3 "autoconversion timescale [s]  ∈(1e3, 1e4) "
 @exportparameter q_liq_threshold 5e-4 "autoconv. threshold [-] ∈(.5, 1) * 1e-3"

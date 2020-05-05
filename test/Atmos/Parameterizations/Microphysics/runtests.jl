@@ -2,7 +2,9 @@ using Test
 using CLIMA.Microphysics
 using CLIMA.MicrophysicsParameters
 using CLIMA.MoistThermodynamics
-using CLIMA.PlanetParameters: R_d, molmass_ratio, grav
+using CLIMA.PlanetParameters: molmass_ratio, R_v
+
+using CLIMA.ParametersType #TODO - ugly! needed to unpack parameters
 
 @testset "RainFallSpeed" begin
 
@@ -23,10 +25,21 @@ using CLIMA.PlanetParameters: R_d, molmass_ratio, grav
     q_rain_range = range(1e-8, stop = 5e-3, length = 10)
     ρ_air, q_tot, ρ_air_ground = 1.2, 20 * 1e-3, 1.22
 
+    #TODO - ugly way to unpack parameters
+    n0_rai_ = ParametersType.getval(n0_rai)
+    α_rai_ = ParametersType.getval(α_rai)
+    β_rai_ = ParametersType.getval(β_rai)
+    η_rai_ = ParametersType.getval(η_rai)
+    ζ_rai_ = ζ_rai(ρ_air)
+
     for q_rai in q_rain_range
-        @test terminal_velocity(q_rai, ρ_air) ≈
+
+        λ_rai_ = lambda(q_rai, ρ_air, n0_rai_, α_rai_, β_rai_)
+
+        @test terminal_velocity(q_rai, λ_rai_, β_rai_, ζ_rai_, η_rai_) ≈
               terminal_velocity_empir(q_rai, q_tot, ρ_air, ρ_air_ground) atol =
             0.2 * terminal_velocity_empir(q_rai, q_tot, ρ_air, ρ_air_ground)
+
     end
 end
 
@@ -35,22 +48,31 @@ end
     q_liq_sat = 5e-3
     frac = [0.0, 0.5, 1.0, 1.5]
 
+    #TODO - ugly way to unpack parameters
+    τ_cond_evap_ = ParametersType.getval(τ_cond_evap)
+
     for fr in frac
         q_liq = q_liq_sat * fr
-        @test conv_q_vap_to_q_liq(
-            PhasePartition(0.0, q_liq_sat, 0.0),
-            PhasePartition(0.0, q_liq, 0.0),
-        ) ≈ (1 - fr) * q_liq_sat / τ_cond_evap_liq
+
+        @test conv_q_vap_to_q_liq_ice(
+                  PhasePartition(0.0, q_liq_sat, 0.0),
+                  PhasePartition(0.0, q_liq, 0.0),
+                  τ_cond_evap_,
+                  Liquid(),
+            ) ≈ (1 - fr) * q_liq_sat / τ_cond_evap_
     end
 end
 
 @testset "RainAutoconversion" begin
 
+    #TODO - ugly way to unpack parameters
+    τ_acnv_ = ParametersType.getval(τ_acnv)
+
     q_liq_small = 0.5 * q_liq_threshold
-    @test conv_q_liq_to_q_rai_acnv(q_liq_small) == 0.0
+    @test conv_q_liq_to_q_rai(q_liq_small, τ_acnv_) == 0.0
 
     q_liq_big = 1.5 * q_liq_threshold
-    @test conv_q_liq_to_q_rai_acnv(q_liq_big) == 0.5 * q_liq_threshold / τ_acnv
+    @test conv_q_liq_to_q_rai(q_liq_big, τ_acnv_) == 0.5 * q_liq_threshold / τ_acnv_
 end
 
 @testset "RainAccretion" begin
@@ -67,10 +89,23 @@ end
     q_rain_range = range(1e-8, stop = 5e-3, length = 10)
     ρ_air, q_liq, q_tot = 1.2, 5e-4, 20e-3
 
+    #TODO - ugly way to unpack parameters
+    n0_rai_ = ParametersType.getval(n0_rai)
+    α_rai_ = ParametersType.getval(α_rai)
+    β_rai_ = ParametersType.getval(β_rai)
+    γ_rai_ = ParametersType.getval(γ_rai)
+    δ_rai_ = ParametersType.getval(δ_rai)
+    ζ_rai_ = ζ_rai(ρ_air)
+    η_rai_ = ParametersType.getval(η_rai)
+    E_lr_ = ParametersType.getval(E_lr)
+
     for q_rai in q_rain_range
-        @test conv_q_liq_to_q_rai_accr(q_liq, q_rai, ρ_air) ≈
-              accretion_empir(q_rai, q_liq, q_tot) atol =
-            0.1 * accretion_empir(q_rai, q_liq, q_tot)
+
+        λ_rai_ = lambda(q_rai, ρ_air, n0_rai_, α_rai_, β_rai_)
+
+        @test accretion(q_liq, q_rai, E_lr_, n0_rai_, λ_rai_, γ_rai_,
+                δ_rai_, ζ_rai_, η_rai_) ≈ accretion_empir(q_rai, q_liq,
+                q_tot) atol = (0.1 * accretion_empir(q_rai, q_liq, q_tot))
     end
 end
 
@@ -117,9 +152,31 @@ end
     R = gas_constant_air(q)
     ρ = p / R / T
 
+    #TODO - ugly way to unpack parameters
+    n0_rai_ = ParametersType.getval(n0_rai)
+    α_rai_ = ParametersType.getval(α_rai)
+    β_rai_ = ParametersType.getval(β_rai)
+    γ_rai_ = ParametersType.getval(γ_rai)
+    δ_rai_ = ParametersType.getval(δ_rai)
+    ζ_rai_ = ζ_rai(ρ)
+    η_rai_ = ParametersType.getval(η_rai)
+    E_lr_ = ParametersType.getval(E_lr)
+    a_vent_rai_ = ParametersType.getval(a_vent_rai)
+    b_vent_rai_ = ParametersType.getval(b_vent_rai)
+    K_therm_ = ParametersType.getval(K_therm)
+    R_v_ = ParametersType.getval(R_v)
+    ν_air_ = ParametersType.getval(ν_air)
+    D_vapor_ = ParametersType.getval(D_vapor)
+    S_liq_ = supersaturation(q, ρ, T, Liquid())
+    G_liq_ = G_func(T, K_therm_, R_v_, D_vapor_, Liquid())
+
     for q_rai in q_rain_range
-        @test conv_q_rai_to_q_vap(q_rai, q, T, p, ρ) ≈
-              rain_evap_empir(q_rai, q, T, p, ρ) atol =
-            -0.5 * rain_evap_empir(q_rai, q, T, p, ρ)
+
+        λ_rai_ = lambda(q_rai, ρ, n0_rai_, α_rai_, β_rai_)
+
+        @test evaporation_sublimation(q_rai, ρ, S_liq_, G_liq_, a_vent_rai_,
+                b_vent_rai_, ν_air_, D_vapor_, n0_rai_, λ_rai_, ζ_rai_,
+                η_rai_) ≈ rain_evap_empir(q_rai, q, T, p, ρ) atol = -0.5 *
+                rain_evap_empir(q_rai, q, T, p, ρ)
     end
 end

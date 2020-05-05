@@ -36,6 +36,7 @@ using CLIMA.Mesh.Filters
 using CLIMA.Mesh.Topologies
 using CLIMA.MoistThermodynamics
 using CLIMA.Microphysics
+using CLIMA.MicrophysicsParameters
 using CLIMA.MPIStateArrays
 using CLIMA.ODESolvers
 using CLIMA.VariableTemplates
