@@ -42,8 +42,11 @@ using CLIMA.ODESolvers
 using CLIMA.VariableTemplates
 using CLIMA.VTK
 
+using CLIMA.ParametersType #TODO - ugly! needed to unpack parameters
+
 using CLIMAParameters
 using CLIMAParameters.Planet: R_d, cp_d, cv_d, cv_v, T_0, e_int_v0, grav
+using CLIMA.PlanetParameters: R_v
 struct EarthParameterSet <: AbstractEarthParameterSet end
 const param_set = EarthParameterSet()
 

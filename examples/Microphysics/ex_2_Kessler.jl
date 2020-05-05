@@ -33,15 +33,15 @@ function vars_aux(m::KinematicModel, FT)
         S::FT
         RH::FT
         rain_w::FT
-        # uncomment below for more diagnostics
-        #src_cloud_liq::FT
-        #src_cloud_ice::FT
-        #src_acnv::FT
-        #src_accr::FT
-        #src_rain_evap::FT
-        #flag_rain::FT
-        #flag_cloud_liq::FT
-        #flag_cloud_ice::FT
+        # additional diagnostics
+        src_cloud_liq::FT
+        src_cloud_ice::FT
+        src_acnv::FT
+        src_accr::FT
+        src_rain_evap::FT
+        flag_rain::FT
+        flag_cloud_liq::FT
+        flag_cloud_ice::FT
     end
 end
 
@@ -114,21 +114,45 @@ function kinematic_model_nodal_update_aux!(
         FT(100)
     aux.RH = aux.q_vap / q_vap_saturation(aux.T, state.ρ, q) * FT(100)
 
-    λ_rai = lambda(aux.q_rai, state.ρ, n0_rai, α_rai, β_rai)
-    aux.rain_w = terminal_velocity(aux.q_rai, λ_rai, β_rai, ζ_rai, η_rai)
+    #TODO - ugly way to unpack parameters
+    n0_rai_ = ParametersType.getval(n0_rai)
+    α_rai_ = ParametersType.getval(α_rai)
+    β_rai_ = ParametersType.getval(β_rai)
+    γ_rai_ = ParametersType.getval(γ_rai)
+    δ_rai_ = ParametersType.getval(δ_rai)
+    ζ_rai_ = ζ_rai(state.ρ)
+    η_rai_ = ParametersType.getval(η_rai)
+    τ_cond_evap_ = ParametersType.getval(τ_cond_evap)
+    τ_sub_resub_ = ParametersType.getval(τ_sub_resub)
+    τ_acnv_ = ParametersType.getval(τ_acnv)
+    E_lr_ = ParametersType.getval(E_lr)
+    a_vent_rai_ = ParametersType.getval(a_vent_rai)
+    b_vent_rai_ = ParametersType.getval(b_vent_rai)
+    K_therm_ = ParametersType.getval(K_therm)
+    R_v_ = ParametersType.getval(R_v)
+    ν_air_ = ParametersType.getval(ν_air)
+    D_vapor_ = ParametersType.getval(D_vapor)
+    S_liq_ = supersaturation(q, state.ρ, aux.T, Liquid())
+    G_liq_ = G_func(aux.T, K_therm_, R_v_, D_vapor_, Liquid())
 
-    # uncomment below for more diagnostics
+    λ_rai_ = lambda(aux.q_rai, state.ρ, n0_rai_, α_rai_, β_rai_)
+    aux.rain_w = terminal_velocity(aux.q_rai, λ_rai_, β_rai_, ζ_rai_, η_rai_)
+
+    # additional diagnostics
     q_eq = PhasePartition_equil(aux.T, state.ρ, aux.q_tot)
-    S_liq = supersaturation(q, state.ρ, Liquid())
-    G_liq = G_func(aux.T, K_therm, R_v, D_vapor, Liquid())
-    aux.src_cloud_liq = state.ρ * conv_q_vap_to_q_liq_ice(q_eq, q, Liquid())
-    aux.src_cloud_ice = state.ρ * conv_q_vap_to_q_ice_ice(q_eq, q, Ice())
-    aux.src_acnv = conv_q_liq_to_q_rai_acnv(aux.q_liq)
-    aux.src_accr = accretion(aux.q_liq, aux.q_rai, E_cr, n0_rai, λ_rai, γ_fall,
-                         δ_fall, ζ_fall, η_fall)
-    aux.src_rain_evap = evaporation_sublimation(aux.q_rai, state.ρ, S_liq, G_liq,
-                         a_vent_rai, b_vent_rai, ν_air, D_vapor, n0_rai, λ_rai,
-                         ζ_rai, η_rai)
+    aux.src_cloud_liq = state.ρ * conv_q_vap_to_q_liq_ice(q_eq, q,
+        τ_cond_evap_, Liquid())
+    aux.src_cloud_ice = state.ρ * conv_q_vap_to_q_liq_ice(q_eq, q,
+        τ_sub_resub_, Ice())
+
+    aux.src_acnv = conv_q_liq_to_q_rai(aux.q_liq, τ_acnv_)
+    aux.src_accr = accretion(aux.q_liq, aux.q_rai, E_lr_, n0_rai_, λ_rai_,
+                         γ_rai_, δ_rai_, ζ_rai_, η_rai_)
+
+    aux.src_rain_evap = evaporation_sublimation(aux.q_rai, state.ρ, S_liq_,
+                         G_liq_, a_vent_rai_, b_vent_rai_, ν_air_, D_vapor_,
+                         n0_rai_, λ_rai_, ζ_rai_, η_rai_)
+
     aux.flag_cloud_liq = FT(0)
     aux.flag_cloud_ice = FT(0)
     aux.flag_rain = FT(0)
@@ -169,9 +193,17 @@ end
     FT = eltype(state)
     u = state.ρu / state.ρ
 
+    #TODO
     q_rai = state.ρq_rai/state.ρ
-    λ_rai = lambda(q_rai, state.ρ, n0_rai, α_rai, β_rai)
-    rain_w = terminal_velocity(q_rai, λ_rai, β_rai, ζ_rai, η_rai)
+
+    n0_rai_ = ParametersType.getval(n0_rai)
+    α_rai_ = ParametersType.getval(α_rai)
+    β_rai_ = ParametersType.getval(β_rai)
+    ζ_rai_ = ζ_rai(state.ρ)
+    η_rai_ = ParametersType.getval(η_rai)
+    λ_rai_ = lambda(q_rai, state.ρ, n0_rai_, α_rai_, β_rai_)
+
+    rain_w = terminal_velocity(q_rai, λ_rai_, β_rai_, ζ_rai_, η_rai_)
 
     nu = nM[1] * u[1] + nM[3] * max(u[3], rain_w, u[3] - rain_w)
 
@@ -188,8 +220,15 @@ end
     FT = eltype(state)
 
     q_rai = state.ρq_rai/state.ρ
-    λ_rai = lambda(q_rai, state.ρ, n0_rai, α_rai, β_rai)
-    rain_w = terminal_velocity(q_rai, λ_rai, β_rai, ζ_rai, η_rai)
+
+    n0_rai_ = ParametersType.getval(n0_rai)
+    α_rai_ = ParametersType.getval(α_rai)
+    β_rai_ = ParametersType.getval(β_rai)
+    ζ_rai_ = ζ_rai(state.ρ)
+    η_rai_ = ParametersType.getval(η_rai)
+    λ_rai_ = lambda(q_rai, state.ρ, n0_rai_, α_rai_, β_rai_)
+
+    rain_w = terminal_velocity(q_rai, λ_rai_, β_rai_, ζ_rai_, η_rai_)
 
     # advect moisture ...
     flux.ρq_tot = SVector(
@@ -258,22 +297,41 @@ function source!(
     source.ρq_rai = FT(0)
     source.ρe = FT(0)
 
-    # compute the microphysics parameters
-    λ_rai = lambda(q_rai, state.ρ, n0_rai, α_rai, β_rai)
-    S_liq = supersaturation(q, state.ρ, Liquid())
-    G_liq = G_func(T, K_therm, R_v, D_vapor, Liquid())
+    #TODO - ugly way to unpack parameters
+    n0_rai_ = ParametersType.getval(n0_rai)
+    α_rai_ = ParametersType.getval(α_rai)
+    β_rai_ = ParametersType.getval(β_rai)
+    γ_rai_ = ParametersType.getval(γ_rai)
+    δ_rai_ = ParametersType.getval(δ_rai)
+    ζ_rai_ = ζ_rai(state.ρ)
+    η_rai_ = ParametersType.getval(η_rai)
+    E_lr_ = ParametersType.getval(E_lr)
+    τ_cond_evap_ = ParametersType.getval(τ_cond_evap)
+    τ_sub_resub_ = ParametersType.getval(τ_sub_resub)
+    τ_acnv_ = ParametersType.getval(τ_acnv)
+    a_vent_rai_ = ParametersType.getval(a_vent_rai)
+    b_vent_rai_ = ParametersType.getval(b_vent_rai)
+    K_therm_ = ParametersType.getval(K_therm)
+    R_v_ = ParametersType.getval(R_v)
+    ν_air_ = ParametersType.getval(ν_air)
+    D_vapor_ = ParametersType.getval(D_vapor)
+    S_liq_ = supersaturation(q, state.ρ, T, Liquid())
+    G_liq_ = G_func(T, K_therm_, R_v_, D_vapor_, Liquid())
+    λ_rai_ = lambda(aux.q_rai, state.ρ, n0_rai_, α_rai_, β_rai_)
 
     # cloud water and ice condensation/evaporation
-    source.ρq_liq += state.ρ * conv_q_vap_to_q_liq_ice(q_eq, q, Liquid())
-    source.ρq_ice += state.ρ * conv_q_vap_to_q_ice_ice(q_eq, q, Ice())
-
+    source.ρq_liq += state.ρ * conv_q_vap_to_q_liq_ice(q_eq, q, τ_cond_evap_,
+                                                       Liquid())
+    source.ρq_ice += state.ρ * conv_q_vap_to_q_liq_ice(q_eq, q, τ_sub_resub_,
+                                                       Ice())
     # tendencies from rain
-    src_q_rai_acnv = conv_q_liq_to_q_rai(q_liq)
-    src_q_rai_accr = accretion(q_liq, q_rai, E_cr, n0_rai, λ_rai, γ_fall,
-                         δ_fall, ζ_fall, η_fall)
-    src_q_rai_evap = evaporation_sublimation(q_rai, state.ρ, S_liq, G_liq,
-                         a_vent_rai, b_vent_rai, ν_air, D_vapor, n0_rai, λ_rai,
-                         ζ_rai, η_rai)
+    src_q_rai_acnv = conv_q_liq_to_q_rai(q_liq, τ_acnv_)
+    src_q_rai_accr = accretion(q_liq, q_rai, E_lr_, n0_rai_, λ_rai_, γ_rai_,
+                         δ_rai_, ζ_rai_, η_rai_)
+    src_q_rai_evap = evaporation_sublimation(q_rai, state.ρ, S_liq_, G_liq_,
+                         a_vent_rai_, b_vent_rai_, ν_air_, D_vapor_, n0_rai_,
+                         λ_rai_, ζ_rai_, η_rai_)
+
     src_q_rai_tot = src_q_rai_acnv + src_q_rai_accr + src_q_rai_evap
 
     source.ρq_liq -= state.ρ * (src_q_rai_acnv + src_q_rai_accr)
